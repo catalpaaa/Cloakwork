@@ -82,10 +82,6 @@
 //
 // =================================================================
 
-// =================================================================
-// KERNEL MODE DETECTION
-// =================================================================
-// auto-detect kernel mode from WDK headers or explicit definition
 #ifndef CW_KERNEL_MODE
     #if defined(_KERNEL_MODE) || defined(NTDDI_VERSION) || defined(_NTDDK_) || defined(_WDMDDK_)
         #define CW_KERNEL_MODE 1
@@ -94,7 +90,6 @@
     #endif
 #endif
 
-// in kernel mode, disable features that require usermode APIs or STL
 #if CW_KERNEL_MODE
     // syscalls don't make sense in kernel mode
     #ifdef CW_ENABLE_SYSCALLS
@@ -102,67 +97,65 @@
     #endif
     #define CW_ENABLE_SYSCALLS 0
 
-    // data hiding uses std::unique_ptr - disable in kernel
+    // std::unique_ptr not available in kernel
     #ifdef CW_ENABLE_DATA_HIDING
         #undef CW_ENABLE_DATA_HIDING
     #endif
     #define CW_ENABLE_DATA_HIDING 0
 
-    // metamorphic uses std::initializer_list - disable in kernel
+    // std::initializer_list not available
     #ifdef CW_ENABLE_METAMORPHIC
         #undef CW_ENABLE_METAMORPHIC
     #endif
     #define CW_ENABLE_METAMORPHIC 0
 
-    // string encryption uses static destructors which need atexit - disable in kernel
+    // static destructors need atexit
     #ifdef CW_ENABLE_STRING_ENCRYPTION
         #undef CW_ENABLE_STRING_ENCRYPTION
     #endif
     #define CW_ENABLE_STRING_ENCRYPTION 0
 
-    // value obfuscation uses C++20 concepts and std::bit_cast - disable in kernel
+    // needs C++20 concepts and std::bit_cast
     #ifdef CW_ENABLE_VALUE_OBFUSCATION
         #undef CW_ENABLE_VALUE_OBFUSCATION
     #endif
     #define CW_ENABLE_VALUE_OBFUSCATION 0
 
-    // import hiding uses PEB walking which needs different impl in kernel
+    // PEB walking needs different impl in kernel
     #ifdef CW_ENABLE_IMPORT_HIDING
         #undef CW_ENABLE_IMPORT_HIDING
     #endif
     #define CW_ENABLE_IMPORT_HIDING 0
 
-    // anti-VM uses usermode APIs
+    // requires usermode APIs
     #ifdef CW_ENABLE_ANTI_VM
         #undef CW_ENABLE_ANTI_VM
     #endif
     #define CW_ENABLE_ANTI_VM 0
 
-    // integrity checks require usermode VirtualQuery
+    // requires VirtualQuery
     #ifdef CW_ENABLE_INTEGRITY_CHECKS
         #undef CW_ENABLE_INTEGRITY_CHECKS
     #endif
     #define CW_ENABLE_INTEGRITY_CHECKS 0
 
-    // function obfuscation uses concepts
+    // needs concepts
     #ifdef CW_ENABLE_FUNCTION_OBFUSCATION
         #undef CW_ENABLE_FUNCTION_OBFUSCATION
     #endif
     #define CW_ENABLE_FUNCTION_OBFUSCATION 0
 
-    // control flow obfuscation uses mba from value obfuscation
+    // depends on value obfuscation (mba)
     #ifdef CW_ENABLE_CONTROL_FLOW
         #undef CW_ENABLE_CONTROL_FLOW
     #endif
     #define CW_ENABLE_CONTROL_FLOW 0
 #endif
 
-// default configuration - all features enabled
 #ifndef CW_ENABLE_ALL
     #define CW_ENABLE_ALL 1
 #endif
 
-// individual feature flags with defaults based on master switch
 #ifndef CW_ENABLE_COMPILE_TIME_RANDOM
     #define CW_ENABLE_COMPILE_TIME_RANDOM CW_ENABLE_ALL
 #endif
@@ -215,7 +208,6 @@
     #define CW_ANTI_DEBUG_RESPONSE 1  // 0=ignore, 1=crash, 2=fake data
 #endif
 
-// validate configuration dependencies
 #if CW_ENABLE_DATA_HIDING && !CW_ENABLE_COMPILE_TIME_RANDOM
     #error "CW_ENABLE_DATA_HIDING requires CW_ENABLE_COMPILE_TIME_RANDOM to be enabled"
 #endif
@@ -224,23 +216,13 @@
     #error "CW_ENABLE_CONTROL_FLOW requires CW_ENABLE_COMPILE_TIME_RANDOM to be enabled"
 #endif
 
-// =================================================================
-// includes
-// =================================================================
-
 #if CW_KERNEL_MODE
-    // =================================================================
-    // KERNEL MODE INCLUDES
-    // =================================================================
-    // assume ntddk.h is already included by the driver before cloakwork.h
-    // if not, the user needs to include it themselves
     #ifndef _NTDDK_
         #error "In kernel mode, include <ntddk.h> before cloakwork.h"
     #endif
 
     #include <intrin.h>
 
-    // forward declare ZwQuerySystemInformation if not available
     extern "C" {
         NTSYSAPI NTSTATUS NTAPI ZwQuerySystemInformation(
             ULONG SystemInformationClass,
@@ -254,10 +236,7 @@
     // selectany allows multiple definitions across translation units
     extern "C" __declspec(selectany) int _fltused = 0;
 
-    // kernel mode: provide our own type definitions to avoid STL conflicts
-    // WDK doesn't support usermode STL headers properly
-
-    // fixed-width integer types for kernel mode (use Windows types)
+    // WDK doesn't ship usermode STL headers
     using int8_t = signed char;
     using int16_t = short;
     using int32_t = int;
@@ -270,7 +249,6 @@
     using ptrdiff_t = SSIZE_T;
 
     namespace std {
-        // std::array replacement for kernel mode
         template<typename T, size_t N>
         struct array {
             T _data[N];
@@ -282,7 +260,6 @@
             constexpr size_t size() const { return N; }
         };
 
-        // std::rotl/rotr replacements for kernel mode
         template<typename T>
         constexpr T rotl(T value, int shift) {
             constexpr int bits = sizeof(T) * 8;
@@ -299,7 +276,6 @@
             return (value >> shift) | (value << (bits - shift));
         }
 
-        // std::index_sequence for kernel mode
         template<size_t... Is>
         struct index_sequence {};
 
@@ -314,7 +290,6 @@
         template<size_t N>
         using make_index_sequence = typename make_index_sequence_impl<N>::type;
 
-        // type traits replacements for kernel mode
         template<bool B, class T = void>
         struct enable_if {};
 
@@ -423,7 +398,6 @@
     }
 
     namespace cloakwork_internal {
-        // kernel spinlock wrapper for thread safety
         class kernel_spinlock {
         private:
             KSPIN_LOCK lock;
@@ -443,7 +417,6 @@
             }
         };
 
-        // simple spinlock guard (RAII)
         class spinlock_guard {
         private:
             kernel_spinlock& lock;
@@ -454,8 +427,6 @@
             spinlock_guard& operator=(const spinlock_guard&) = delete;
         };
 
-        // minimal atomic replacement for kernel mode
-        // uses interlocked operations
         template<typename T>
         class kernel_atomic {
         private:
@@ -466,7 +437,6 @@
             kernel_atomic(T val) : value(val) {}
 
             T load(int = 0) const {
-                // full memory barrier
                 MemoryBarrier();
                 return value;
             }
@@ -501,7 +471,6 @@
             }
         };
 
-        // kernel pool allocation wrapper
         inline void* kernel_alloc(size_t size) {
             // use NonPagedPoolNx for security (no-execute)
             return ExAllocatePool2(POOL_FLAG_NON_PAGED, size, 'kwlC');
@@ -513,8 +482,7 @@
             }
         }
 
-        // LDR_DATA_TABLE_ENTRY for kernel driver enumeration
-        // (different structure than user mode PEB version)
+        // different layout than the usermode PEB version
         struct KLDR_DATA_TABLE_ENTRY {
             LIST_ENTRY InLoadOrderLinks;
             PVOID ExceptionTable;
@@ -535,20 +503,19 @@
         };
     }
 
-    // type aliases for cross-mode compatibility
     #define CW_ATOMIC(T) cloakwork_internal::kernel_atomic<T>
     #define CW_MUTEX cloakwork_internal::kernel_spinlock
     #define CW_LOCK_GUARD(m) cloakwork_internal::spinlock_guard _cw_guard(m)
+    #define CW_MO_RELAXED 0
 
 #else
-    // =================================================================
-    // USER MODE INCLUDES
-    // =================================================================
+    #include <array>
     #include <vector>
     #include <algorithm>
     #include <atomic>
     #include <mutex>
     #include <memory>
+    #include <bit>
 
     #ifdef _WIN32
         #include <windows.h>
@@ -589,19 +556,21 @@
         }
     #endif
 
-    // type aliases for cross-mode compatibility
     #define CW_ATOMIC(T) std::atomic<T>
     #define CW_MUTEX std::mutex
     #define CW_LOCK_GUARD(m) std::lock_guard<std::mutex> _cw_guard(m)
+    #define CW_MO_RELAXED std::memory_order_relaxed
 
 #endif // CW_KERNEL_MODE
 
-// compiler detection and configuration
 #ifdef _MSC_VER
     #define CW_FORCEINLINE __forceinline
     #define CW_NOINLINE __declspec(noinline)
     #define CW_SECTION(x) __declspec(allocate(x))
     #define CW_COMPILER_BARRIER() _ReadWriteBarrier()
+    // optimization barriers - prevents LTCG/WPO from seeing through obfuscation
+    #define CW_OPT_OFF __pragma(optimize("", off))
+    #define CW_OPT_ON __pragma(optimize("", on))
     #pragma warning(push)
     #pragma warning(disable: 4996 4244 4267)
 #elif defined(__GNUC__) || defined(__clang__)
@@ -609,11 +578,15 @@
     #define CW_NOINLINE __attribute__((noinline))
     #define CW_SECTION(x) __attribute__((section(x)))
     #define CW_COMPILER_BARRIER() asm volatile("" ::: "memory")
+    #define CW_OPT_OFF _Pragma("GCC push_options") _Pragma("GCC optimize(\"O0\")")
+    #define CW_OPT_ON _Pragma("GCC pop_options")
 #else
     #define CW_FORCEINLINE inline
     #define CW_NOINLINE
     #define CW_SECTION(x)
     #define CW_COMPILER_BARRIER() std::atomic_signal_fence(std::memory_order_seq_cst)
+    #define CW_OPT_OFF
+    #define CW_OPT_ON
 #endif
 
 // =================================================================
@@ -681,6 +654,57 @@
 //
 // CW_FLATTEN(func, args...)        - flattens control flow via state machine
 //                                    usage: auto result = CW_FLATTEN(myFunc, arg1, arg2);
+//
+// CFG FLATTENING (block-level state machine)
+// -------------------------------------------
+// CW_FLAT_FUNC(ret_type)           - begin flattened function returning ret_type
+//                                    usage: auto r = CW_FLAT_FUNC(int) ... CW_FLAT_END;
+//
+// CW_FLAT_VOID                     - begin void flattened function
+//                                    usage: CW_FLAT_VOID ... CW_FLAT_VOID_END;
+//
+// CW_FLAT_VARS(...)                - declare shared variables across blocks
+//                                    usage: CW_FLAT_VARS(int x = 0; int y = 0;)
+//
+// CW_FLAT_ENTRY(id)                - set entry block ID
+//                                    usage: CW_FLAT_ENTRY(0)
+//
+// CW_FLAT_BEGIN                    - begin dispatch loop (auto-inserts dead blocks)
+//
+// CW_FLAT_BLOCK(id)                - start a block with given ID
+//                                    usage: CW_FLAT_BLOCK(0) x = 42; CW_FLAT_GOTO(1)
+//
+// CW_FLAT_GOTO(id)                 - unconditional jump to block
+//                                    usage: CW_FLAT_GOTO(1)
+//
+// CW_FLAT_GOTO_OBF(id)             - obfuscated jump (adds fake dead-block branch)
+//                                    usage: CW_FLAT_GOTO_OBF(1)
+//
+// CW_FLAT_IF(cond, true_id, false_id) - conditional branch
+//                                    usage: CW_FLAT_IF(x > 0, 2, 3)
+//
+// CW_FLAT_IF_OBF(cond, t, f)       - obfuscated conditional (volatile + opaque pred)
+//                                    usage: CW_FLAT_IF_OBF(x > 0, 2, 3)
+//
+// CW_FLAT_RETURN(val)              - return value and exit
+//                                    usage: CW_FLAT_RETURN(x * 2)
+//
+// CW_FLAT_EXIT()                   - exit without return value
+//                                    usage: CW_FLAT_EXIT()
+//
+// CW_FLAT_SWITCH2..4(expr, ...)    - multi-way dispatch (2-4 cases + default)
+//                                    usage: CW_FLAT_SWITCH3(cmd, 0,blk_a, 1,blk_b, 2,blk_c, blk_def)
+//
+// CW_FLAT_END                      - close dispatch loop (non-void)
+// CW_FLAT_VOID_END                 - close dispatch loop (void)
+//
+// SIMPLIFIED CFG PROTECTION (automatic state machine wrapping)
+// -------------------------------------------------------------
+// CW_PROTECT(ret_type, body)        - wraps code in encrypted state machine, returns ret_type
+//                                    usage: int r = CW_PROTECT(int, { return x * 2; });
+//
+// CW_PROTECT_VOID(body)             - wraps void code in encrypted state machine
+//                                    usage: CW_PROTECT_VOID({ do_work(); });
 //
 // FUNCTION CALL PROTECTION
 // ------------------------
@@ -826,13 +850,39 @@
 // integrity::verifyFunctions(...)   - verify multiple functions at once
 //                                    usage: if(!integrity::verifyFunctions(f1, f2)) { }
 //
+// CONVENIENCE MACROS & TYPE ALIASES
+// ----------------------------------
+// CW_IS_DEBUGGED()                  - is_debugger_present() (PEB + NtGlobalFlag)
+// CW_HAS_HWBP()                    - has_hardware_breakpoints() (DR0-DR3)
+// CW_CHECK_DEBUG()                  - comprehensive_check() (all anti-debug combined)
+// CW_DETECT_HIDING()               - detect anti-anti-debug tools (ScyllaHide etc.)
+// CW_DETECT_PARENT()               - check if parent is a debugger
+// CW_DETECT_KERNEL_DBG()           - kernel debugger detection
+// CW_TIMING_CHECK()                - rdtsc vs QPC timing check
+// CW_DETECT_DBG_ARTIFACTS()        - debugger registry artifacts
+// CW_DETECT_HYPERVISOR()           - hypervisor present (CPUID)
+// CW_DETECT_VM_VENDOR()            - VM vendor string detection
+// CW_DETECT_LOW_RESOURCES()        - low CPU/RAM (sandbox indicator)
+// CW_DETECT_SANDBOX_DLLS()         - sandbox DLL detection
+// CW_GET_MODULE(name)              - getModuleBase via PEB walk (string → hash)
+//                                    usage: void* ntdll = CW_GET_MODULE("ntdll.dll");
+// CW_GET_PROC(mod, func)           - getProcAddress via export walk (string → hash)
+//                                    usage: void* fn = CW_GET_PROC(ntdll, "NtClose");
+// CW_HASH_RT(str)                  - runtime FNV-1a hash (case-sensitive)
+// CW_HASH_RT_CI(str)               - runtime FNV-1a hash (case-insensitive)
+// CW_COMPUTE_HASH(ptr, size)       - compute hash of memory region
+// CW_VERIFY_FUNCS(...)             - verify multiple functions aren't hooked
+// CW_RET_GADGET()                  - get cached ret gadget for return address spoofing
+// CW_NEG(a)                        - obfuscated negation using MBA (~x + 1)
+//
+// Type aliases (in cloakwork namespace):
+// cloakwork::obf_bool               - shorthand for obfuscated_bool
+// cloakwork::meta_func<Sig>         - shorthand for metamorphic_function<Sig>
+// cloakwork::rt_const<T>            - shorthand for runtime_constant<T>
+//
 // =================================================================
 
 namespace cloakwork {
-
-    // =================================================================
-    // compile-time random number generation
-    // =================================================================
 
 #if CW_ENABLE_COMPILE_TIME_RANDOM
     namespace detail {
@@ -846,7 +896,6 @@ namespace cloakwork {
             return hash;
         }
 
-        // hardware random number support (intel/amd rdseed)
         inline bool try_hardware_random(uint64_t& out) {
 #ifdef _WIN32
 #ifdef __RDSEED__
@@ -858,46 +907,37 @@ namespace cloakwork {
             return false;
         }
 
-        // runtime key derivation - combines multiple entropy sources
-        // note: this doesn't provide cryptographic randomness, it just makes
-        // runtime keys unique per execution to frustrate static analysis
+        // not cryptographic - just makes runtime keys unique per execution
+        // to frustrate static analysis
         inline uint64_t runtime_entropy_seed() {
             uint64_t entropy = 0;
 
-            // try hardware random first
             if (try_hardware_random(entropy)) {
                 return entropy;
             }
 
 #if CW_KERNEL_MODE
-            // kernel mode entropy sources
-            // rdtsc - cpu cycle counter (changes every execution)
             entropy ^= __rdtsc();
 
-            // current process/thread from kernel (kaslr makes these different)
+            // kaslr makes these different per boot
             entropy ^= reinterpret_cast<uint64_t>(PsGetCurrentProcess());
             entropy ^= reinterpret_cast<uint64_t>(PsGetCurrentThread());
             entropy ^= static_cast<uint64_t>(HandleToULong(PsGetCurrentProcessId())) << 32;
             entropy ^= static_cast<uint64_t>(HandleToULong(PsGetCurrentThreadId()));
 
-            // stack address (kaslr randomizes this)
             volatile char stack_var;
             entropy ^= reinterpret_cast<uint64_t>(&stack_var);
 
-            // high-precision kernel performance counter
             LARGE_INTEGER perf_counter;
             perf_counter = KeQueryPerformanceCounter(nullptr);
             entropy ^= static_cast<uint64_t>(perf_counter.QuadPart);
 
-            // kernel system time
             LARGE_INTEGER system_time;
             KeQuerySystemTime(&system_time);
             entropy ^= static_cast<uint64_t>(system_time.QuadPart);
 
-            // current interrupt time (very high resolution)
             entropy ^= static_cast<uint64_t>(KeQueryInterruptTime());
 
-            // pool allocation address (kaslr randomized)
             void* pool_alloc = cloakwork_internal::kernel_alloc(16);
             if (pool_alloc) {
                 entropy ^= reinterpret_cast<uint64_t>(pool_alloc);
@@ -905,45 +945,37 @@ namespace cloakwork {
             }
 
 #elif defined(_WIN32)
-            // user mode entropy sources
-            // rdtsc - cpu cycle counter (changes every execution)
             entropy ^= __rdtsc();
 
-            // process and thread ids (aslr makes these different per run)
+            // aslr makes these different per run
             entropy ^= static_cast<uint64_t>(GetCurrentProcessId()) << 32;
             entropy ^= static_cast<uint64_t>(GetCurrentThreadId());
 
-            // stack address (aslr randomizes this)
             volatile char stack_var;
             entropy ^= reinterpret_cast<uint64_t>(&stack_var);
 
-            // module base address (aslr randomizes this)
             HMODULE module = GetModuleHandleA(nullptr);
             entropy ^= reinterpret_cast<uint64_t>(module);
 
-            // high-precision performance counter
             LARGE_INTEGER perf_counter;
             QueryPerformanceCounter(&perf_counter);
             entropy ^= static_cast<uint64_t>(perf_counter.QuadPart);
 
-            // system time with high precision
             FILETIME ft;
             GetSystemTimeAsFileTime(&ft);
             entropy ^= (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 
-            // heap address (also aslr randomized)
             void* heap_alloc = HeapAlloc(GetProcessHeap(), 0, 16);
             if (heap_alloc) {
                 entropy ^= reinterpret_cast<uint64_t>(heap_alloc);
                 HeapFree(GetProcessHeap(), 0, heap_alloc);
             }
 #else
-            // fallback for non-windows platforms
             entropy ^= reinterpret_cast<uint64_t>(&entropy);
             entropy ^= static_cast<uint64_t>(time(nullptr));
 #endif
 
-            // mix the entropy thoroughly using knuth's multiplicative hash
+            // knuth multiplicative hash mixing
             entropy ^= std::rotl(entropy, 31);
             entropy *= 0x9e3779b97f4a7c15ULL;
             entropy ^= entropy >> 27;
@@ -953,14 +985,12 @@ namespace cloakwork {
             return entropy;
         }
 
-        // fast runtime random using xorshift64* (seeded once per thread/cpu)
+        // xorshift64*
         inline uint64_t runtime_entropy() {
 #if CW_KERNEL_MODE
-            // kernel mode: use a simple seeded state with interlocked update
-            // thread_local doesn't work well in kernel drivers
+            // thread_local doesn't work in kernel drivers, use interlocked state
             static volatile LONG64 state = 0;
 
-            // lazy initialization
             LONG64 current = InterlockedCompareExchange64(&state, 0, 0);
             if (current == 0) {
                 LONG64 seed = static_cast<LONG64>(runtime_entropy_seed());
@@ -969,7 +999,6 @@ namespace cloakwork {
                 if (current == 0) current = seed;
             }
 
-            // xorshift64* with interlocked update
             LONG64 x = current;
             x ^= x >> 12;
             x ^= x << 25;
@@ -977,10 +1006,7 @@ namespace cloakwork {
             InterlockedExchange64(&state, x);
             return static_cast<uint64_t>(x) * 0x2545F4914F6CDD1DULL;
 #else
-            // user mode: use thread_local for per-thread state
             thread_local uint64_t state = runtime_entropy_seed();
-
-            // xorshift64* algorithm - fast and good quality
             uint64_t x = state;
             x ^= x >> 12;
             x ^= x << 25;
@@ -991,10 +1017,8 @@ namespace cloakwork {
         }
 
 #if CW_KERNEL_MODE
-        // kernel mode: consteval with __TIME__/__DATE__ doesn't work properly
-        // use a simpler constexpr approach with __COUNTER__ and __LINE__
+        // consteval with __TIME__/__DATE__ doesn't work properly in WDK
         constexpr uint32_t compile_seed_impl(uint32_t line, uint32_t counter) {
-            // lcg mixing with line and counter for per-instantiation uniqueness
             uint32_t seed = 0xDEADBEEF;
             seed ^= line * 0x01000193;
             seed ^= counter * 0x811c9dc5;
@@ -1016,14 +1040,11 @@ namespace cloakwork {
         };
     }
 
-    // kernel mode: use simpler compile-time random without consteval issues
     #define CW_RANDOM_CT() (cloakwork::detail::random_generator<CW_COMPILE_SEED()>::value())
     #define CW_RAND_CT(min, max) ((min) + (CW_RANDOM_CT() % ((max) - (min) + 1)))
 
 #else
-        // user mode: full consteval support with __TIME__/__DATE__
         consteval uint32_t compile_seed() {
-            // combine multiple compile-time values for entropy
             constexpr uint32_t time_hash = fnv1a_hash(__TIME__);
             constexpr uint32_t date_hash = fnv1a_hash(__DATE__);
             constexpr uint32_t file_hash = fnv1a_hash(__FILE__);
@@ -1041,7 +1062,6 @@ namespace cloakwork {
         };
     }
 
-    // separate compile-time and runtime random macros
     #define CW_RANDOM_CT() (cloakwork::detail::random_generator<cloakwork::detail::compile_seed() ^ __COUNTER__>::value())
     #define CW_RAND_CT(min, max) ((min) + (CW_RANDOM_CT() % ((max) - (min) + 1)))
 #endif
@@ -1049,11 +1069,9 @@ namespace cloakwork {
     #define CW_RANDOM_RT() (cloakwork::detail::runtime_entropy())
     #define CW_RAND_RT(min, max) ((min) + (CW_RANDOM_RT() % ((max) - (min) + 1)))
 
-    // backward compatibility - defaults to compile-time
     #define CW_RANDOM() CW_RANDOM_CT()
     #define CW_RAND(min, max) CW_RAND_CT(min, max)
 #else
-    // fallback to simple runtime random when compile-time random is disabled
     #define CW_RANDOM_CT() (rand())
     #define CW_RAND_CT(min, max) ((min) + (rand() % ((max) - (min) + 1)))
     #define CW_RANDOM_RT() (rand())
@@ -1062,12 +1080,7 @@ namespace cloakwork {
     #define CW_RAND(min, max) ((min) + (rand() % ((max) - (min) + 1)))
 #endif
 
-    // =================================================================
-    // compile-time string hashing
-    // =================================================================
-
     namespace hash {
-        // fnv-1a hash for compile-time string hashing
         consteval uint32_t fnv1a(const char* str, size_t len) {
             uint32_t hash = 0x811c9dc5;
             for (size_t i = 0; i < len; ++i) {
@@ -1077,13 +1090,11 @@ namespace cloakwork {
             return hash;
         }
 
-        // consteval version for string literals
         template<size_t N>
         consteval uint32_t fnv1a(const char (&str)[N]) {
             return fnv1a(str, N - 1);
         }
 
-        // wide string version
         consteval uint32_t fnv1a_wide(const wchar_t* str, size_t len) {
             uint32_t hash = 0x811c9dc5;
             for (size_t i = 0; i < len; ++i) {
@@ -1100,7 +1111,6 @@ namespace cloakwork {
             return fnv1a_wide(str, N - 1);
         }
 
-        // runtime hash for dynamic strings
         CW_FORCEINLINE uint32_t fnv1a_runtime(const char* str) {
             uint32_t hash = 0x811c9dc5;
             while (*str) {
@@ -1122,7 +1132,6 @@ namespace cloakwork {
             return hash;
         }
 
-        // case-insensitive runtime hash
         CW_FORCEINLINE uint32_t fnv1a_runtime_ci(const char* str) {
             uint32_t hash = 0x811c9dc5;
             while (*str) {
@@ -1147,8 +1156,7 @@ namespace cloakwork {
             return hash;
         }
 
-        // case-insensitive wide-to-ascii runtime hash
-        // (hashes wide string as if it were ascii - for comparing against CW_HASH_CI)
+        // hashes wide string using only the ascii byte, for comparing against CW_HASH_CI
         CW_FORCEINLINE uint32_t fnv1a_runtime_ci_w2a(const wchar_t* str) {
             uint32_t hash = 0x811c9dc5;
             while (*str) {
@@ -1161,7 +1169,6 @@ namespace cloakwork {
             return hash;
         }
 
-        // case-insensitive compile-time hash (for module names)
         consteval uint32_t fnv1a_ci(const char* str, size_t len) {
             uint32_t hash = 0x811c9dc5;
             for (size_t i = 0; i < len; ++i) {
@@ -1179,19 +1186,175 @@ namespace cloakwork {
         }
     }
 
-    // compile-time hash macro
     #define CW_HASH(s) ([]() consteval { return cloakwork::hash::fnv1a(s); }())
     #define CW_HASH_WIDE(s) ([]() consteval { return cloakwork::hash::fnv1a_wide(s); }())
     #define CW_HASH_CI(s) ([]() consteval { return cloakwork::hash::fnv1a_ci(s); }())
 
-    // =================================================================
-    // anti-debugging and anti-analysis
-    // =================================================================
+    namespace internal_cipher {
+
+        // position-dependent xor cipher to prevent Hex-Rays stack-string reconstruction
+        template<uint32_t Key, size_t N>
+        struct encrypted_buf {
+            uint8_t data[N];
+
+            consteval encrypted_buf(const char (&str)[N]) : data{} {
+                for (size_t i = 0; i < N; ++i) {
+                    uint32_t subkey = Key ^ (static_cast<uint32_t>(i) * 0x9E3779B9u);
+                    subkey ^= subkey >> 16;
+                    subkey *= 0x45D9F3Bu;
+                    subkey ^= subkey >> 13;
+                    data[i] = static_cast<uint8_t>(str[i]) ^ static_cast<uint8_t>(subkey);
+                }
+            }
+        };
+
+        template<uint32_t Key, size_t N>
+        CW_NOINLINE void decrypt_to_stack(const encrypted_buf<Key, N>& enc, char (&out)[N]) {
+            volatile uint8_t* dst = reinterpret_cast<volatile uint8_t*>(out);
+            for (size_t i = 0; i < N; ++i) {
+                uint32_t subkey = Key ^ (static_cast<uint32_t>(i) * 0x9E3779B9u);
+                subkey ^= subkey >> 16;
+                subkey *= 0x45D9F3Bu;
+                subkey ^= subkey >> 13;
+                dst[i] = enc.data[i] ^ static_cast<uint8_t>(subkey);
+            }
+            CW_COMPILER_BARRIER();
+        }
+
+        template<size_t N>
+        CW_FORCEINLINE void zero_buf(char (&buf)[N]) {
+            volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(buf);
+            for (size_t i = 0; i < N; ++i) p[i] = 0;
+            CW_COMPILER_BARRIER();
+        }
+
+        // avoids strstr IAT entry
+        CW_FORCEINLINE const char* find_substr(const char* haystack, const char* needle) {
+            if (!haystack || !needle || !*needle) return haystack;
+            for (const char* h = haystack; *h; ++h) {
+                const char* h2 = h;
+                const char* n = needle;
+                while (*h2 && *n && *h2 == *n) { ++h2; ++n; }
+                if (!*n) return h;
+            }
+            return nullptr;
+        }
+    }
+
+    #define CW_ADSTR(name, str) \
+        static constexpr cloakwork::internal_cipher::encrypted_buf< \
+            __LINE__ * 0x45D9F3Bu + sizeof(str) * 0x9E3779B9u, sizeof(str)> \
+            _cw_adenc_##name(str); \
+        char name[sizeof(str)]; \
+        cloakwork::internal_cipher::decrypt_to_stack(_cw_adenc_##name, name)
+
+    #define CW_ADSTR_ZERO(name) \
+        cloakwork::internal_cipher::zero_buf(name)
 
 #if CW_ENABLE_ANTI_DEBUG
     namespace anti_debug {
 
-        // code integrity verification - detects hooks and patches
+        // self-contained module/proc resolution that avoids IAT entries
+        namespace detail {
+
+            CW_FORCEINLINE void* get_module_by_hash(uint32_t module_hash) {
+#if defined(_WIN32) && !CW_KERNEL_MODE
+                __try {
+#ifdef _WIN64
+                    auto peb = reinterpret_cast<PEB*>(__readgsqword(0x60));
+#else
+                    auto peb = reinterpret_cast<PEB*>(__readfsdword(0x30));
+#endif
+                    if (!peb || !peb->Ldr) return nullptr;
+
+                    auto ldr = peb->Ldr;
+                    auto head = &ldr->InMemoryOrderModuleList;
+                    for (auto curr = head->Flink; curr != head; curr = curr->Flink) {
+                        auto entry = CONTAINING_RECORD(curr, cloakwork_internal::CW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+                        if (!entry->BaseDllName.Buffer || entry->BaseDllName.Length == 0) continue;
+                        if (hash::fnv1a_runtime_ci_w2a(entry->BaseDllName.Buffer) == module_hash)
+                            return entry->DllBase;
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER) {
+                    return nullptr;
+                }
+#endif
+                return nullptr;
+            }
+
+            CW_FORCEINLINE bool is_module_loaded(uint32_t module_hash) {
+                return get_module_by_hash(module_hash) != nullptr;
+            }
+
+            CW_FORCEINLINE void* get_proc_by_hash(void* module, uint32_t func_hash) {
+#if defined(_WIN32) && !CW_KERNEL_MODE
+                if (!module) return nullptr;
+                __try {
+                    auto dos = static_cast<IMAGE_DOS_HEADER*>(module);
+                    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
+                    if (dos->e_lfanew <= 0 || dos->e_lfanew >= 0x1000) return nullptr;
+
+                    auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+                        reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
+                    if (nt->Signature != IMAGE_NT_SIGNATURE) return nullptr;
+
+                    uint32_t image_size = nt->OptionalHeader.SizeOfImage;
+                    if (image_size == 0 || image_size > 0x7FFFFFFF) return nullptr;
+
+                    auto& exp_dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+                    if (exp_dir.VirtualAddress == 0 || exp_dir.Size == 0) return nullptr;
+
+                    auto base = reinterpret_cast<uint8_t*>(module);
+                    auto exports = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(base + exp_dir.VirtualAddress);
+
+                    auto names     = reinterpret_cast<uint32_t*>(base + exports->AddressOfNames);
+                    auto ordinals  = reinterpret_cast<uint16_t*>(base + exports->AddressOfNameOrdinals);
+                    auto functions = reinterpret_cast<uint32_t*>(base + exports->AddressOfFunctions);
+
+                    for (uint32_t i = 0; i < exports->NumberOfNames; ++i) {
+                        auto name = reinterpret_cast<const char*>(base + names[i]);
+                        if (hash::fnv1a_runtime(name) == func_hash) {
+                            uint16_t ordinal = ordinals[i];
+                            if (ordinal >= exports->NumberOfFunctions) return nullptr;
+                            return base + functions[ordinal];
+                        }
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER) {
+                    return nullptr;
+                }
+#endif
+                return nullptr;
+            }
+
+            // runtime hash for 12-byte CPUID vendor buffer (not null-terminated, fixed len)
+            CW_FORCEINLINE uint32_t hash_vendor_12(const char* buf) {
+                uint32_t h = 0x811c9dc5;
+                for (int i = 0; i < 12; ++i) {
+                    h ^= static_cast<uint8_t>(buf[i]);
+                    h *= 0x01000193;
+                }
+                return h;
+            }
+
+            // compile-time hash for 12-byte vendor string literals
+            static consteval uint32_t hash_vendor_12_ct(const char* buf, size_t len) {
+                uint32_t h = 0x811c9dc5;
+                size_t n = len < 12 ? len : 12;
+                for (size_t i = 0; i < n; ++i) {
+                    h ^= static_cast<uint8_t>(buf[i]);
+                    h *= 0x01000193;
+                }
+                // pad with zeros if shorter than 12
+                for (size_t i = n; i < 12; ++i) {
+                    h ^= 0;
+                    h *= 0x01000193;
+                }
+                return h;
+            }
+        }
+
         inline uint32_t compute_crc32(const uint8_t* data, size_t length) {
             uint32_t crc = 0xFFFFFFFF;
             for (size_t i = 0; i < length; ++i) {
@@ -1210,24 +1373,14 @@ namespace cloakwork {
             return actual_hash == expected_hash;
         }
 
-        // basic debugger detection - exposed for manual use
         CW_FORCEINLINE bool is_debugger_present() {
 #if CW_KERNEL_MODE
-            // kernel mode debugger detection
-
-            // technique 1: check for kernel debugger (KdDebuggerEnabled global)
-            // this is set when a kernel debugger is attached
             if (*KdDebuggerEnabled) return true;
-
-            // technique 2: check if kernel debugger is not present flag is false
             if (!*KdDebuggerNotPresent) return true;
 
-            // technique 3: check if current process is being debugged
-            // PsIsProcessBeingDebugged is documented and available since Windows 8
+            // PsIsProcessBeingDebugged checks the DebugPort field internally
             PEPROCESS current_process = PsGetCurrentProcess();
             if (current_process) {
-                // use the documented API when available
-                // PsIsProcessBeingDebugged checks the DebugPort field internally
                 typedef BOOLEAN (*PsIsProcessBeingDebuggedFn)(PEPROCESS Process);
                 static PsIsProcessBeingDebuggedFn PsIsProcessBeingDebugged = nullptr;
                 static bool resolved = false;
@@ -1248,23 +1401,23 @@ namespace cloakwork {
             return false;
 
 #elif defined(_WIN32)
-            // user mode debugger detection
-
-            // technique 1: isdebuggerpresent api
-            if (::IsDebuggerPresent()) return true;
-
-            // technique 2: peb flag check (x64 compatible)
+            // PEB-only, no IAT import
             __try {
 #ifdef _WIN64
                 PPEB peb = (PPEB)__readgsqword(0x60);
                 if (peb && peb->BeingDebugged) return true;
+
+                DWORD nt_global_flag = *reinterpret_cast<DWORD*>(reinterpret_cast<uint8_t*>(peb) + 0xBC);
+                if (nt_global_flag & 0x70) return true; // 0x70 = FLG_HEAP_ENABLE_TAIL_CHECK | FREE_CHECK | VALIDATE_PARAMS
 #else
                 PPEB peb = (PPEB)__readfsdword(0x30);
                 if (peb && peb->BeingDebugged) return true;
+
+                DWORD nt_global_flag = *reinterpret_cast<DWORD*>(reinterpret_cast<uint8_t*>(peb) + 0x68);
+                if (nt_global_flag & 0x70) return true;
 #endif
             }
             __except(EXCEPTION_EXECUTE_HANDLER) {
-                // silently handle access violations
             }
             return false;
 #else
@@ -1272,11 +1425,9 @@ namespace cloakwork {
 #endif
         }
 
-        // timing-based debugger detection with better thresholds
         template<typename Func>
         CW_FORCEINLINE bool timing_check(Func func, uint64_t threshold = 10000) {
 #if CW_KERNEL_MODE
-            // kernel mode timing check
             LARGE_INTEGER freq;
             LARGE_INTEGER start = KeQueryPerformanceCounter(&freq);
 
@@ -1306,7 +1457,6 @@ namespace cloakwork {
             return false;
 
 #elif defined(_WIN32)
-            // user mode timing check
             LARGE_INTEGER start, end, freq;
             QueryPerformanceFrequency(&freq);
 
@@ -1338,7 +1488,6 @@ namespace cloakwork {
 #endif
         }
 
-        // breakpoint detection via int3 scan
         CW_FORCEINLINE bool has_breakpoints(void* addr, size_t size) {
             uint8_t* bytes = reinterpret_cast<uint8_t*>(addr);
             for(size_t i = 0; i < size; ++i) {
@@ -1347,12 +1496,9 @@ namespace cloakwork {
             return false;
         }
 
-        // hardware breakpoint detection
         CW_FORCEINLINE bool has_hardware_breakpoints() {
 #if CW_KERNEL_MODE
-            // kernel mode: read debug registers directly
-            // DR0-DR3 contain hardware breakpoint addresses
-            // if any are non-zero, breakpoints are set
+            // DR0-DR3: non-zero means hardware breakpoints are set
 #ifdef _WIN64
             uint64_t dr0 = __readdr(0);
             uint64_t dr1 = __readdr(1);
@@ -1376,12 +1522,21 @@ namespace cloakwork {
 #endif
 
 #elif defined(_WIN32)
-            // user mode: use GetThreadContext
-            CONTEXT ctx = {};
-            ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+            // dynamically resolve GetThreadContext to avoid IAT entry
+            {
+                auto kernel32 = detail::get_module_by_hash(CW_HASH_CI("kernel32.dll"));
+                if (!kernel32) return false;
 
-            if(GetThreadContext(GetCurrentThread(), &ctx)) {
-                return (ctx.Dr0 || ctx.Dr1 || ctx.Dr2 || ctx.Dr3);
+                auto pGetThreadContext = reinterpret_cast<BOOL(WINAPI*)(HANDLE, LPCONTEXT)>(
+                    detail::get_proc_by_hash(kernel32, CW_HASH("GetThreadContext")));
+                if (!pGetThreadContext) return false;
+
+                CONTEXT ctx = {};
+                ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+                if (pGetThreadContext(GetCurrentThread(), &ctx)) {
+                    return (ctx.Dr0 || ctx.Dr1 || ctx.Dr2 || ctx.Dr3);
+                }
             }
             return false;
 #else
@@ -1389,47 +1544,84 @@ namespace cloakwork {
 #endif
         }
 
-        // modern anti-debug techniques
         namespace advanced {
 
-            // detect common anti-anti-debug plugins (scyllahide, titanhide, etc.)
             CW_FORCEINLINE bool detect_hiding_tools() {
 #if CW_KERNEL_MODE
-                // kernel mode: these are user-mode specific checks
-                // in kernel, we rely on kernel debugger detection instead
                 return false;
 #elif defined(_WIN32)
                 __try {
-                    // check for scyllahide dlls
-                    if (GetModuleHandleA("scylla_hide.dll")) return true;
-                    if (GetModuleHandleA("ScyllaHideX64.dll")) return true;
-                    if (GetModuleHandleA("ScyllaHideX86.dll")) return true;
-
-                    // check for titanhide
-                    if (GetModuleHandleA("TitanHide.dll")) return true;
-
-                    // check for hyperhide
-                    if (GetModuleHandleA("HyperHide.dll")) return true;
-
-                    // check for known debugger window classes
-                    const char* debugger_windows[] = {
-                        "OLLYDBG",
-                        "WinDbgFrameClass",
-                        "ID",  // immunity debugger
-                        "Zeta Debugger",
-                        "Rock Debugger",
-                        "ObsidianGUI",
-                        nullptr
+                    constexpr uint32_t hiding_dll_hashes[] = {
+                        CW_HASH_CI("scylla_hide.dll"),
+                        CW_HASH_CI("ScyllaHideX64.dll"),
+                        CW_HASH_CI("ScyllaHideX86.dll"),
+                        CW_HASH_CI("TitanHide.dll"),
+                        CW_HASH_CI("HyperHide.dll"),
                     };
 
-                    for (int i = 0; debugger_windows[i] != nullptr; i++) {
-                        if (FindWindowA(debugger_windows[i], nullptr)) return true;
+                    for (auto h : hiding_dll_hashes) {
+                        if (detail::is_module_loaded(h)) return true;
                     }
 
-                    // check for x64dbg/x32dbg by window title
-                    if (FindWindowA(nullptr, "x64dbg")) return true;
-                    if (FindWindowA(nullptr, "x32dbg")) return true;
-                    if (FindWindowA(nullptr, "x96dbg")) return true;
+                    auto user32 = detail::get_module_by_hash(CW_HASH_CI("user32.dll"));
+                    if (!user32) return false;
+
+                    auto pEnumWindows = reinterpret_cast<BOOL(WINAPI*)(WNDENUMPROC, LPARAM)>(
+                        detail::get_proc_by_hash(user32, CW_HASH("EnumWindows")));
+                    auto pGetClassNameA = reinterpret_cast<int(WINAPI*)(HWND, LPSTR, int)>(
+                        detail::get_proc_by_hash(user32, CW_HASH("GetClassNameA")));
+                    auto pGetWindowTextA = reinterpret_cast<int(WINAPI*)(HWND, LPSTR, int)>(
+                        detail::get_proc_by_hash(user32, CW_HASH("GetWindowTextA")));
+
+                    if (pEnumWindows && pGetClassNameA && pGetWindowTextA) {
+                        constexpr uint32_t dbg_class_hashes[] = {
+                            CW_HASH("OLLYDBG"),
+                            CW_HASH("WinDbgFrameClass"),
+                            CW_HASH("ID"),
+                            CW_HASH("ObsidianGUI"),
+                        };
+                        constexpr uint32_t dbg_title_hashes[] = {
+                            CW_HASH("x64dbg"),
+                            CW_HASH("x32dbg"),
+                            CW_HASH("x96dbg"),
+                            CW_HASH("Zeta Debugger"),
+                            CW_HASH("Rock Debugger"),
+                        };
+
+                        struct enum_ctx {
+                            bool found;
+                            const uint32_t* class_hashes;
+                            size_t class_count;
+                            const uint32_t* title_hashes;
+                            size_t title_count;
+                            decltype(pGetClassNameA) getClassName;
+                            decltype(pGetWindowTextA) getWindowText;
+                        };
+
+                        enum_ctx ctx = {
+                            false, dbg_class_hashes, sizeof(dbg_class_hashes)/sizeof(uint32_t),
+                            dbg_title_hashes, sizeof(dbg_title_hashes)/sizeof(uint32_t),
+                            pGetClassNameA, pGetWindowTextA
+                        };
+
+                        pEnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+                            auto* c = reinterpret_cast<enum_ctx*>(lParam);
+                            char buf[256];
+                            if (c->getClassName(hwnd, buf, sizeof(buf))) {
+                                uint32_t h = hash::fnv1a_runtime(buf);
+                                for (size_t i = 0; i < c->class_count; ++i)
+                                    if (h == c->class_hashes[i]) { c->found = true; return FALSE; }
+                            }
+                            if (c->getWindowText(hwnd, buf, sizeof(buf)) > 0) {
+                                uint32_t h = hash::fnv1a_runtime(buf);
+                                for (size_t i = 0; i < c->title_count; ++i)
+                                    if (h == c->title_hashes[i]) { c->found = true; return FALSE; }
+                            }
+                            return TRUE;
+                        }, reinterpret_cast<LPARAM>(&ctx));
+
+                        if (ctx.found) return true;
+                    }
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER) {
                     return false;
@@ -1438,10 +1630,8 @@ namespace cloakwork {
                 return false;
             }
 
-            // detect kernel debugger
             CW_FORCEINLINE bool kernel_debugger_present() {
 #if CW_KERNEL_MODE
-                // kernel mode: direct access to kernel debugger flags
                 if (*KdDebuggerEnabled) return true;
                 if (!*KdDebuggerNotPresent) return true;
 
@@ -1477,12 +1667,12 @@ namespace cloakwork {
                         PULONG ReturnLength
                     );
 
-                    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+                    auto ntdll = detail::get_module_by_hash(CW_HASH_CI("ntdll.dll"));
                     if (!ntdll) return false;
 
                     auto NtQuerySystemInformation =
                         reinterpret_cast<pNtQuerySystemInformation>(
-                            GetProcAddress(ntdll, "NtQuerySystemInformation"));
+                            detail::get_proc_by_hash(ntdll, CW_HASH("NtQuerySystemInformation")));
 
                     if (NtQuerySystemInformation) {
                         ULONG kernel_debug = 0;
@@ -1498,21 +1688,30 @@ namespace cloakwork {
                 return false;
             }
 
-            // check if parent process is a debugger
             CW_FORCEINLINE bool suspicious_parent_process() {
 #if CW_KERNEL_MODE
-                // kernel mode: check parent process of current process
                 PEPROCESS current = PsGetCurrentProcess();
                 if (!current) return false;
 
-                // get parent process id - offset varies by windows version
-                // for simplicity, we skip this check in kernel mode
-                // (kernel drivers don't typically have meaningful parent processes)
+                // parent pid offset varies by windows version, skip in kernel
                 return false;
 
 #elif defined(_WIN32)
                 __try {
-                    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                    auto kernel32 = detail::get_module_by_hash(CW_HASH_CI("kernel32.dll"));
+                    if (!kernel32) return false;
+
+                    auto pCreateToolhelp32Snapshot = reinterpret_cast<HANDLE(WINAPI*)(DWORD, DWORD)>(
+                        detail::get_proc_by_hash(kernel32, CW_HASH("CreateToolhelp32Snapshot")));
+                    auto pProcess32FirstW = reinterpret_cast<BOOL(WINAPI*)(HANDLE, LPPROCESSENTRY32W)>(
+                        detail::get_proc_by_hash(kernel32, CW_HASH("Process32FirstW")));
+                    auto pProcess32NextW = reinterpret_cast<BOOL(WINAPI*)(HANDLE, LPPROCESSENTRY32W)>(
+                        detail::get_proc_by_hash(kernel32, CW_HASH("Process32NextW")));
+
+                    if (!pCreateToolhelp32Snapshot || !pProcess32FirstW || !pProcess32NextW)
+                        return false;
+
+                    HANDLE snapshot = pCreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
                     if (snapshot == INVALID_HANDLE_VALUE) return false;
 
                     PROCESSENTRY32W pe;
@@ -1520,44 +1719,44 @@ namespace cloakwork {
                     DWORD current_pid = GetCurrentProcessId();
                     DWORD parent_pid = 0;
 
-                    // find our parent pid
-                    if (Process32FirstW(snapshot, &pe)) {
+                    if (pProcess32FirstW(snapshot, &pe)) {
                         do {
                             if (pe.th32ProcessID == current_pid) {
                                 parent_pid = pe.th32ParentProcessID;
                                 break;
                             }
-                        } while (Process32NextW(snapshot, &pe));
+                        } while (pProcess32NextW(snapshot, &pe));
                     }
 
-                    // find parent process name
+                    // find parent process name and compare via hash (no plaintext exe names)
                     if (parent_pid) {
+                        constexpr uint32_t suspicious_parent_hashes[] = {
+                            CW_HASH_CI("x64dbg.exe"),
+                            CW_HASH_CI("x32dbg.exe"),
+                            CW_HASH_CI("ollydbg.exe"),
+                            CW_HASH_CI("ida.exe"),
+                            CW_HASH_CI("ida64.exe"),
+                            CW_HASH_CI("windbg.exe"),
+                            CW_HASH_CI("immunitydebugger.exe"),
+                            CW_HASH_CI("cheatengine-x86_64.exe"),
+                            CW_HASH_CI("cheatengine-i386.exe"),
+                            CW_HASH_CI("processhacker.exe"),
+                        };
+
                         pe.dwSize = sizeof(PROCESSENTRY32W);
-                        if (Process32FirstW(snapshot, &pe)) {
+                        if (pProcess32FirstW(snapshot, &pe)) {
                             do {
                                 if (pe.th32ProcessID == parent_pid) {
-                                    // check against known debuggers
-                                    const wchar_t* suspicious_parents[] = {
-                                        L"x64dbg.exe", L"x32dbg.exe", L"ollydbg.exe",
-                                        L"ida.exe", L"ida64.exe", L"windbg.exe",
-                                        L"immunitydebugger.exe", L"cheatengine-x86_64.exe",
-                                        L"cheatengine-i386.exe", L"processhacker.exe",
-                                        nullptr
-                                    };
-
-                                    wchar_t lower_name[MAX_PATH];
-                                    wcscpy_s(lower_name, MAX_PATH, pe.szExeFile);
-                                    _wcslwr_s(lower_name, MAX_PATH);
-
-                                    for (int i = 0; suspicious_parents[i] != nullptr; i++) {
-                                        if (wcsstr(lower_name, suspicious_parents[i])) {
+                                    uint32_t name_hash = hash::fnv1a_runtime_ci_w2a(pe.szExeFile);
+                                    for (auto h : suspicious_parent_hashes) {
+                                        if (name_hash == h) {
                                             CloseHandle(snapshot);
                                             return true;
                                         }
                                     }
                                     break;
                                 }
-                            } while (Process32NextW(snapshot, &pe));
+                            } while (pProcess32NextW(snapshot, &pe));
                         }
                     }
 
@@ -1570,14 +1769,10 @@ namespace cloakwork {
                 return false;
             }
 
-            // detect memory breakpoints (page guard)
             CW_FORCEINLINE bool detect_memory_breakpoints(void* address, size_t size) {
 #if CW_KERNEL_MODE
-                // kernel mode: check if memory is nonpaged and readable
-                // page guard detection is less relevant in kernel mode
-                // but we can check for suspicious memory states
                 if (!MmIsAddressValid(address)) return false;
-                return false;  // simplified for kernel
+                return false;
 
 #elif defined(_WIN32)
                 MEMORY_BASIC_INFORMATION mbi;
@@ -1600,34 +1795,48 @@ namespace cloakwork {
                 return false;
             }
 
-            // check for debugger-specific registry keys
             CW_FORCEINLINE bool detect_debugger_artifacts() {
 #if CW_KERNEL_MODE
-                // kernel mode: could use ZwOpenKey but registry access
-                // from kernel is more complex. skip for now.
                 return false;
 
 #elif defined(_WIN32)
                 __try {
-                    // check for common debugger installation paths in registry
+                    auto advapi32 = detail::get_module_by_hash(CW_HASH_CI("advapi32.dll"));
+                    if (!advapi32) return false;
+
+                    auto pRegOpenKeyExA = reinterpret_cast<LSTATUS(WINAPI*)(HKEY, LPCSTR, DWORD, REGSAM, PHKEY)>(
+                        detail::get_proc_by_hash(advapi32, CW_HASH("RegOpenKeyExA")));
+                    auto pRegCloseKey = reinterpret_cast<LSTATUS(WINAPI*)(HKEY)>(
+                        detail::get_proc_by_hash(advapi32, CW_HASH("RegCloseKey")));
+                    if (!pRegOpenKeyExA || !pRegCloseKey) return false;
+
                     HKEY key;
-                    const char* debugger_keys[] = {
-                        "SOFTWARE\\x64dbg",
-                        "SOFTWARE\\OllyDbg",
-                        "SOFTWARE\\Immunity Inc\\Immunity Debugger",
-                        nullptr
+
+                    // helper lambda to probe registry in both HKCU and HKLM
+                    auto check_key = [&](const char* path) -> bool {
+                        if (pRegOpenKeyExA(HKEY_CURRENT_USER, path, 0, KEY_READ, &key) == ERROR_SUCCESS) {
+                            pRegCloseKey(key);
+                            return true;
+                        }
+                        if (pRegOpenKeyExA(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key) == ERROR_SUCCESS) {
+                            pRegCloseKey(key);
+                            return true;
+                        }
+                        return false;
                     };
 
-                    for (int i = 0; debugger_keys[i] != nullptr; i++) {
-                        if (RegOpenKeyExA(HKEY_CURRENT_USER, debugger_keys[i], 0, KEY_READ, &key) == ERROR_SUCCESS) {
-                            RegCloseKey(key);
-                            return true;
-                        }
-                        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, debugger_keys[i], 0, KEY_READ, &key) == ERROR_SUCCESS) {
-                            RegCloseKey(key);
-                            return true;
-                        }
-                    }
+                    // compile-time encrypted registry key strings (not reconstructable by Hex-Rays)
+                    { CW_ADSTR(k0, "SOFTWARE\\x64dbg");
+                      if (check_key(k0)) { CW_ADSTR_ZERO(k0); return true; }
+                      CW_ADSTR_ZERO(k0); }
+
+                    { CW_ADSTR(k1, "SOFTWARE\\OllyDbg");
+                      if (check_key(k1)) { CW_ADSTR_ZERO(k1); return true; }
+                      CW_ADSTR_ZERO(k1); }
+
+                    { CW_ADSTR(k2, "SOFTWARE\\Immunity Inc\\Immunity Debugger");
+                      if (check_key(k2)) { CW_ADSTR_ZERO(k2); return true; }
+                      CW_ADSTR_ZERO(k2); }
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER) {
                     return false;
@@ -1636,11 +1845,9 @@ namespace cloakwork {
                 return false;
             }
 
-            // advanced timing check (compares rdtsc vs qpc for hook detection)
             CW_FORCEINLINE bool advanced_timing_check() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 __try {
-                    // compare rdtsc vs queryperformancecounter
                     LARGE_INTEGER freq, qpc_start, qpc_end;
                     if (!QueryPerformanceFrequency(&freq) || freq.QuadPart == 0) {
                         return false;
@@ -1649,7 +1856,6 @@ namespace cloakwork {
                     uint64_t tsc_start = __rdtsc();
                     QueryPerformanceCounter(&qpc_start);
 
-                    // small operation
                     volatile int dummy = 0;
                     for (int i = 0; i < 100; i++) {
                         dummy += i;
@@ -1659,12 +1865,12 @@ namespace cloakwork {
                     QueryPerformanceCounter(&qpc_end);
                     uint64_t tsc_end = __rdtsc();
 
-                    // calculate elapsed time using both methods
                     uint64_t tsc_delta = tsc_end - tsc_start;
                     uint64_t qpc_delta_us = ((qpc_end.QuadPart - qpc_start.QuadPart) * 1000000) / freq.QuadPart;
 
-                    // if operation took suspiciously long (debugger step-through)
-                    if (tsc_delta > 1000000) return true;
+                    // threshold derived from compile-time random
+                    constexpr uint64_t tsc_thresh = 800000 + (CW_RANDOM_CT() % 400000);
+                    if (tsc_delta > tsc_thresh) return true;
 
                     // check for inconsistent timing (one clock source is hooked)
                     if (qpc_delta_us > 0) {
@@ -1680,25 +1886,23 @@ namespace cloakwork {
             }
         }
 
-        // comprehensive check combining all techniques
         CW_FORCEINLINE bool comprehensive_check() {
             __try {
-                // basic checks
                 if (is_debugger_present()) return true;
                 if (has_hardware_breakpoints()) return true;
 
-                // timing check with dummy operation
+                // threshold derived from compile-time random to prevent easy constant patching
+                constexpr uint64_t timing_threshold = 40000 + (CW_RANDOM_CT() % 20000);
                 bool timing_suspicious = timing_check([]() {
                     volatile int dummy = 0;
                     for (int i = 0; i < 100; i++) {
                         dummy += i;
                         CW_COMPILER_BARRIER();
                     }
-                }, 50000);
+                }, timing_threshold);
 
                 if (timing_suspicious) return true;
 
-                // advanced checks - wrapped individually for safety
                 __try {
                     if (advanced::detect_hiding_tools()) return true;
                 } __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -1718,7 +1922,6 @@ namespace cloakwork {
             }
         }
 
-        // inline anti-debug check - scatter these throughout your code
         CW_FORCEINLINE void inline_check() {
 #if CW_ANTI_DEBUG_RESPONSE == 1
             if (is_debugger_present() || has_hardware_breakpoints()) {
@@ -1732,10 +1935,8 @@ namespace cloakwork {
         }
 
 #if CW_ENABLE_ANTI_VM
-        // anti-VM and sandbox detection
         namespace anti_vm {
 
-            // detect hypervisor via cpuid
             CW_FORCEINLINE bool is_hypervisor_present() {
 #if defined(_WIN32)
                 int cpuInfo[4];
@@ -1746,7 +1947,6 @@ namespace cloakwork {
 #endif
             }
 
-            // detect VM vendor string
             CW_FORCEINLINE bool detect_vm_vendor() {
 #if defined(_WIN32)
                 __try {
@@ -1759,14 +1959,21 @@ namespace cloakwork {
                     memcpy(vendor + 8, &cpuInfo[3], 4);
                     vendor[12] = 0;
 
-                    const char* vmVendors[] = {
-                        "VMwareVMware", "Microsoft Hv", "VBoxVBoxVBox",
-                        "KVMKVMKVM\0\0\0", "XenVMMXenVMM", "prl hyperv  ",
-                        "TCGTCGTCGTCG", nullptr
+                    // compare vendor string via hash (no plaintext vendor strings in binary)
+                    uint32_t vendor_hash = detail::hash_vendor_12(vendor);
+
+                    constexpr uint32_t vm_vendor_hashes[] = {
+                        detail::hash_vendor_12_ct("VMwareVMware", 12),
+                        detail::hash_vendor_12_ct("Microsoft Hv", 12),
+                        detail::hash_vendor_12_ct("VBoxVBoxVBox", 12),
+                        detail::hash_vendor_12_ct("KVMKVMKVM\0\0\0", 12),
+                        detail::hash_vendor_12_ct("XenVMMXenVMM", 12),
+                        detail::hash_vendor_12_ct("prl hyperv  ", 12),
+                        detail::hash_vendor_12_ct("TCGTCGTCGTCG", 12),
                     };
 
-                    for (int i = 0; vmVendors[i]; ++i) {
-                        if (memcmp(vendor, vmVendors[i], 12) == 0) return true;
+                    for (auto h : vm_vendor_hashes) {
+                        if (vendor_hash == h) return true;
                     }
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -1776,7 +1983,6 @@ namespace cloakwork {
                 return false;
             }
 
-            // check for low resource counts (common in sandboxes)
             CW_FORCEINLINE bool detect_low_resources() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 __try {
@@ -1788,7 +1994,6 @@ namespace cloakwork {
                     GlobalMemoryStatusEx(&ms);
                     if (ms.ullTotalPhys < 2ULL * 1024 * 1024 * 1024) return true;
 
-                    // check disk size
                     ULARGE_INTEGER freeBytesAvailable, totalBytes, freeBytes;
                     if (GetDiskFreeSpaceExA("C:\\", &freeBytesAvailable, &totalBytes, &freeBytes)) {
                         if (totalBytes.QuadPart < 60ULL * 1024 * 1024 * 1024) return true;
@@ -1801,39 +2006,64 @@ namespace cloakwork {
                 return false;
             }
 
-            // detect common sandbox DLLs
             CW_FORCEINLINE bool detect_sandbox_dlls() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 __try {
-                    const char* sandboxDlls[] = {
-                        "SbieDll.dll",      // sandboxie
-                        "dbghelp.dll",      // often loaded by analysis tools
-                        "api_log.dll",      // api logging
-                        "dir_watch.dll",    // directory watching
-                        "pstorec.dll",      // password store (sometimes in sandboxes)
-                        "vmcheck.dll",      // vm check library
-                        "wpespy.dll",       // wpe pro (packet editor)
-                        "cmdvrt32.dll",     // comodo sandbox
-                        "cmdvrt64.dll",     // comodo sandbox
-                        "cuckoomon.dll",    // cuckoo sandbox
-                        nullptr
+                    constexpr uint32_t sandbox_dll_hashes[] = {
+                        CW_HASH_CI("SbieDll.dll"),       // sandboxie
+                        CW_HASH_CI("dbghelp.dll"),       // often loaded by analysis tools
+                        CW_HASH_CI("api_log.dll"),       // api logging
+                        CW_HASH_CI("dir_watch.dll"),     // directory watching
+                        CW_HASH_CI("pstorec.dll"),       // password store
+                        CW_HASH_CI("vmcheck.dll"),       // vm check library
+                        CW_HASH_CI("wpespy.dll"),        // wpe pro
+                        CW_HASH_CI("cmdvrt32.dll"),      // comodo sandbox
+                        CW_HASH_CI("cmdvrt64.dll"),      // comodo sandbox
+                        CW_HASH_CI("cuckoomon.dll"),     // cuckoo sandbox
                     };
 
-                    for (int i = 0; sandboxDlls[i]; ++i) {
-                        if (GetModuleHandleA(sandboxDlls[i])) return true;
+                    for (auto h : sandbox_dll_hashes) {
+                        if (detail::is_module_loaded(h)) return true;
                     }
 
-                    // check for analysis tool windows
-                    const char* analysisWindows[] = {
-                        "PROCMON_WINDOW_CLASS",
-                        "FilemonClass",
-                        "RegmonClass",
-                        "Autoruns",
-                        nullptr
-                    };
+                    auto user32 = detail::get_module_by_hash(CW_HASH_CI("user32.dll"));
+                    if (user32) {
+                        auto pEnumWindows = reinterpret_cast<BOOL(WINAPI*)(WNDENUMPROC, LPARAM)>(
+                            detail::get_proc_by_hash(user32, CW_HASH("EnumWindows")));
+                        auto pGetClassNameA = reinterpret_cast<int(WINAPI*)(HWND, LPSTR, int)>(
+                            detail::get_proc_by_hash(user32, CW_HASH("GetClassNameA")));
 
-                    for (int i = 0; analysisWindows[i]; ++i) {
-                        if (FindWindowA(analysisWindows[i], nullptr)) return true;
+                        if (pEnumWindows && pGetClassNameA) {
+                            constexpr uint32_t tool_class_hashes[] = {
+                                CW_HASH("PROCMON_WINDOW_CLASS"),
+                                CW_HASH("FilemonClass"),
+                                CW_HASH("RegmonClass"),
+                                CW_HASH("Autoruns"),
+                            };
+
+                            struct sb_enum_ctx {
+                                bool found;
+                                const uint32_t* hashes;
+                                size_t count;
+                                decltype(pGetClassNameA) getClassName;
+                            };
+
+                            sb_enum_ctx ctx = { false, tool_class_hashes,
+                                sizeof(tool_class_hashes)/sizeof(uint32_t), pGetClassNameA };
+
+                            pEnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+                                auto* c = reinterpret_cast<sb_enum_ctx*>(lParam);
+                                char buf[256];
+                                if (c->getClassName(hwnd, buf, sizeof(buf))) {
+                                    uint32_t h = hash::fnv1a_runtime(buf);
+                                    for (size_t i = 0; i < c->count; ++i)
+                                        if (h == c->hashes[i]) { c->found = true; return FALSE; }
+                                }
+                                return TRUE;
+                            }, reinterpret_cast<LPARAM>(&ctx));
+
+                            if (ctx.found) return true;
+                        }
                     }
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -1843,37 +2073,58 @@ namespace cloakwork {
                 return false;
             }
 
-            // detect suspicious usernames/computer names
+            // compile-time encrypted search strings + inline substr (no strstr in IAT)
             CW_FORCEINLINE bool detect_sandbox_names() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 __try {
                     char buffer[256];
                     DWORD size = sizeof(buffer);
 
-                    // check username
                     if (GetUserNameA(buffer, &size)) {
-                        const char* suspiciousUsers[] = {
-                            "sandbox", "virus", "malware", "sample", "test",
-                            "user", "admin", "currentuser", "vmware", "vbox",
-                            nullptr
-                        };
+                        for (DWORD i = 0; i < size && buffer[i]; ++i)
+                            if (buffer[i] >= 'A' && buffer[i] <= 'Z') buffer[i] += 32;
 
-                        for (int i = 0; suspiciousUsers[i]; ++i) {
-                            if (strstr(buffer, suspiciousUsers[i])) return true;
+                        CW_ADSTR(s0, "sandbox"); CW_ADSTR(s1, "virus");
+                        CW_ADSTR(s2, "malware"); CW_ADSTR(s3, "sample");
+                        CW_ADSTR(s4, "test");    CW_ADSTR(s5, "user");
+                        CW_ADSTR(s6, "admin");   CW_ADSTR(s7, "currentuser");
+                        CW_ADSTR(s8, "vmware");  CW_ADSTR(s9, "vbox");
+
+                        const char* checks[] = { s0, s1, s2, s3, s4, s5, s6, s7, s8, s9 };
+                        for (auto c : checks) {
+                            if (internal_cipher::find_substr(buffer, c)) {
+                                CW_ADSTR_ZERO(s0); CW_ADSTR_ZERO(s1); CW_ADSTR_ZERO(s2);
+                                CW_ADSTR_ZERO(s3); CW_ADSTR_ZERO(s4); CW_ADSTR_ZERO(s5);
+                                CW_ADSTR_ZERO(s6); CW_ADSTR_ZERO(s7); CW_ADSTR_ZERO(s8);
+                                CW_ADSTR_ZERO(s9);
+                                return true;
+                            }
                         }
+                        CW_ADSTR_ZERO(s0); CW_ADSTR_ZERO(s1); CW_ADSTR_ZERO(s2);
+                        CW_ADSTR_ZERO(s3); CW_ADSTR_ZERO(s4); CW_ADSTR_ZERO(s5);
+                        CW_ADSTR_ZERO(s6); CW_ADSTR_ZERO(s7); CW_ADSTR_ZERO(s8);
+                        CW_ADSTR_ZERO(s9);
                     }
 
-                    // check computer name
                     size = sizeof(buffer);
                     if (GetComputerNameA(buffer, &size)) {
-                        const char* suspiciousComputers[] = {
-                            "sandbox", "test", "virus", "malware", "sample",
-                            nullptr
-                        };
+                        for (DWORD i = 0; i < size && buffer[i]; ++i)
+                            if (buffer[i] >= 'A' && buffer[i] <= 'Z') buffer[i] += 32;
 
-                        for (int i = 0; suspiciousComputers[i]; ++i) {
-                            if (strstr(buffer, suspiciousComputers[i])) return true;
+                        CW_ADSTR(c0, "sandbox"); CW_ADSTR(c1, "test");
+                        CW_ADSTR(c2, "virus");   CW_ADSTR(c3, "malware");
+                        CW_ADSTR(c4, "sample");
+
+                        const char* checks[] = { c0, c1, c2, c3, c4 };
+                        for (auto c : checks) {
+                            if (internal_cipher::find_substr(buffer, c)) {
+                                CW_ADSTR_ZERO(c0); CW_ADSTR_ZERO(c1); CW_ADSTR_ZERO(c2);
+                                CW_ADSTR_ZERO(c3); CW_ADSTR_ZERO(c4);
+                                return true;
+                            }
                         }
+                        CW_ADSTR_ZERO(c0); CW_ADSTR_ZERO(c1); CW_ADSTR_ZERO(c2);
+                        CW_ADSTR_ZERO(c3); CW_ADSTR_ZERO(c4);
                     }
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -1883,26 +2134,48 @@ namespace cloakwork {
                 return false;
             }
 
-            // detect VM-specific registry keys
             CW_FORCEINLINE bool detect_vm_registry() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 __try {
-                    HKEY key;
-                    const char* vmKeys[] = {
-                        "SOFTWARE\\VMware, Inc.\\VMware Tools",
-                        "SOFTWARE\\Oracle\\VirtualBox Guest Additions",
-                        "SYSTEM\\CurrentControlSet\\Services\\VBoxGuest",
-                        "SYSTEM\\CurrentControlSet\\Services\\vmci",
-                        "SYSTEM\\CurrentControlSet\\Services\\vmhgfs",
-                        nullptr
-                    };
+                    auto advapi32 = detail::get_module_by_hash(CW_HASH_CI("advapi32.dll"));
+                    if (!advapi32) return false;
 
-                    for (int i = 0; vmKeys[i]; ++i) {
-                        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, vmKeys[i], 0, KEY_READ, &key) == ERROR_SUCCESS) {
-                            RegCloseKey(key);
+                    auto pRegOpenKeyExA = reinterpret_cast<LSTATUS(WINAPI*)(HKEY, LPCSTR, DWORD, REGSAM, PHKEY)>(
+                        detail::get_proc_by_hash(advapi32, CW_HASH("RegOpenKeyExA")));
+                    auto pRegCloseKey = reinterpret_cast<LSTATUS(WINAPI*)(HKEY)>(
+                        detail::get_proc_by_hash(advapi32, CW_HASH("RegCloseKey")));
+                    if (!pRegOpenKeyExA || !pRegCloseKey) return false;
+
+                    HKEY key;
+
+                    auto check_hklm = [&](const char* path) -> bool {
+                        if (pRegOpenKeyExA(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key) == ERROR_SUCCESS) {
+                            pRegCloseKey(key);
                             return true;
                         }
-                    }
+                        return false;
+                    };
+
+                    // compile-time encrypted VM registry key strings
+                    { CW_ADSTR(k0, "SOFTWARE\\VMware, Inc.\\VMware Tools");
+                      if (check_hklm(k0)) { CW_ADSTR_ZERO(k0); return true; }
+                      CW_ADSTR_ZERO(k0); }
+
+                    { CW_ADSTR(k1, "SOFTWARE\\Oracle\\VirtualBox Guest Additions");
+                      if (check_hklm(k1)) { CW_ADSTR_ZERO(k1); return true; }
+                      CW_ADSTR_ZERO(k1); }
+
+                    { CW_ADSTR(k2, "SYSTEM\\CurrentControlSet\\Services\\VBoxGuest");
+                      if (check_hklm(k2)) { CW_ADSTR_ZERO(k2); return true; }
+                      CW_ADSTR_ZERO(k2); }
+
+                    { CW_ADSTR(k3, "SYSTEM\\CurrentControlSet\\Services\\vmci");
+                      if (check_hklm(k3)) { CW_ADSTR_ZERO(k3); return true; }
+                      CW_ADSTR_ZERO(k3); }
+
+                    { CW_ADSTR(k4, "SYSTEM\\CurrentControlSet\\Services\\vmhgfs");
+                      if (check_hklm(k4)) { CW_ADSTR_ZERO(k4); return true; }
+                      CW_ADSTR_ZERO(k4); }
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER) {
                     return false;
@@ -1911,7 +2184,6 @@ namespace cloakwork {
                 return false;
             }
 
-            // detect VM-specific MAC address prefixes
             CW_FORCEINLINE bool detect_vm_mac() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 __try {
@@ -1958,7 +2230,6 @@ namespace cloakwork {
                 return false;
             }
 
-            // comprehensive VM/sandbox check
             CW_FORCEINLINE bool comprehensive_check() {
                 __try {
                     if (is_hypervisor_present()) return true;
@@ -1978,7 +2249,6 @@ namespace cloakwork {
 #endif // CW_ENABLE_ANTI_VM
     }
 
-    // macro to crash if debugger detected
     #define CW_ANTI_DEBUG() \
         do { \
             if(cloakwork::anti_debug::comprehensive_check()) { \
@@ -1989,7 +2259,6 @@ namespace cloakwork {
 
     #define CW_INLINE_CHECK() cloakwork::anti_debug::inline_check()
 
-    // anti-VM macro
     #if CW_ENABLE_ANTI_VM
         #define CW_ANTI_VM() \
             do { \
@@ -2006,7 +2275,6 @@ namespace cloakwork {
     #endif
 
 #else
-    // no-op when anti-debug is disabled
     namespace anti_debug {
         inline bool is_debugger_present() { return false; }
         template<typename Func> inline bool timing_check(Func, uint64_t = 1000) { return false; }
@@ -2033,361 +2301,406 @@ namespace cloakwork {
     #define CW_CHECK_VM() (false)
 #endif
 
-    // =================================================================
-    // compile-time string encryption
-    // =================================================================
-
 #if CW_ENABLE_STRING_ENCRYPTION
     namespace string_encrypt {
 
-        template<size_t N, char Key1 = CW_RAND_CT(1, 127), char Key2 = CW_RAND_CT(1, 127)>
+        // xtea block cipher - 64-bit blocks, 128-bit key, 32 rounds
+        // tiny code footprint, fully constexpr, strong against pattern matching
+        namespace xtea {
+            static constexpr uint32_t DELTA = 0x9E3779B9;
+            static constexpr uint32_t ROUNDS = 32;
+
+            struct key128 {
+                uint32_t k[4];
+            };
+
+            static constexpr void encrypt_block(uint32_t& v0, uint32_t& v1, const key128& key) {
+                uint32_t sum = 0;
+                for (uint32_t i = 0; i < ROUNDS; ++i) {
+                    v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + key.k[sum & 3]);
+                    sum += DELTA;
+                    v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + key.k[(sum >> 11) & 3]);
+                }
+            }
+
+            static constexpr void decrypt_block(uint32_t& v0, uint32_t& v1, const key128& key) {
+                uint32_t sum = DELTA * ROUNDS;
+                for (uint32_t i = 0; i < ROUNDS; ++i) {
+                    v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + key.k[(sum >> 11) & 3]);
+                    sum -= DELTA;
+                    v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + key.k[sum & 3]);
+                }
+            }
+
+            // templated to avoid reinterpret_cast, which is forbidden in constexpr
+            template<typename ByteT>
+            static constexpr void encrypt_buffer(ByteT* data, size_t len, const key128& key) {
+                for (size_t i = 0; i + 7 < len; i += 8) {
+                    uint32_t v0 = static_cast<uint32_t>(static_cast<uint8_t>(data[i]))
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+1])) << 8)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+2])) << 16)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+3])) << 24);
+                    uint32_t v1 = static_cast<uint32_t>(static_cast<uint8_t>(data[i+4]))
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+5])) << 8)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+6])) << 16)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+7])) << 24);
+
+                    encrypt_block(v0, v1, key);
+
+                    data[i]   = static_cast<ByteT>(static_cast<uint8_t>(v0));
+                    data[i+1] = static_cast<ByteT>(static_cast<uint8_t>(v0 >> 8));
+                    data[i+2] = static_cast<ByteT>(static_cast<uint8_t>(v0 >> 16));
+                    data[i+3] = static_cast<ByteT>(static_cast<uint8_t>(v0 >> 24));
+                    data[i+4] = static_cast<ByteT>(static_cast<uint8_t>(v1));
+                    data[i+5] = static_cast<ByteT>(static_cast<uint8_t>(v1 >> 8));
+                    data[i+6] = static_cast<ByteT>(static_cast<uint8_t>(v1 >> 16));
+                    data[i+7] = static_cast<ByteT>(static_cast<uint8_t>(v1 >> 24));
+                }
+
+                // remaining bytes: xor with key material
+                size_t tail_start = (len / 8) * 8;
+                for (size_t i = tail_start; i < len; ++i) {
+                    data[i] = static_cast<ByteT>(static_cast<uint8_t>(data[i]) ^
+                        static_cast<uint8_t>(key.k[i % 4] >> ((i % 4) * 8)));
+                }
+            }
+
+            template<typename ByteT>
+            static constexpr void decrypt_buffer(ByteT* data, size_t len, const key128& key) {
+                // remaining bytes first (reverse order of encrypt)
+                size_t tail_start = (len / 8) * 8;
+                for (size_t i = tail_start; i < len; ++i) {
+                    data[i] = static_cast<ByteT>(static_cast<uint8_t>(data[i]) ^
+                        static_cast<uint8_t>(key.k[i % 4] >> ((i % 4) * 8)));
+                }
+
+                for (size_t i = 0; i + 7 < len; i += 8) {
+                    uint32_t v0 = static_cast<uint32_t>(static_cast<uint8_t>(data[i]))
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+1])) << 8)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+2])) << 16)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+3])) << 24);
+                    uint32_t v1 = static_cast<uint32_t>(static_cast<uint8_t>(data[i+4]))
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+5])) << 8)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+6])) << 16)
+                        | (static_cast<uint32_t>(static_cast<uint8_t>(data[i+7])) << 24);
+
+                    decrypt_block(v0, v1, key);
+
+                    data[i]   = static_cast<ByteT>(static_cast<uint8_t>(v0));
+                    data[i+1] = static_cast<ByteT>(static_cast<uint8_t>(v0 >> 8));
+                    data[i+2] = static_cast<ByteT>(static_cast<uint8_t>(v0 >> 16));
+                    data[i+3] = static_cast<ByteT>(static_cast<uint8_t>(v0 >> 24));
+                    data[i+4] = static_cast<ByteT>(static_cast<uint8_t>(v1));
+                    data[i+5] = static_cast<ByteT>(static_cast<uint8_t>(v1 >> 8));
+                    data[i+6] = static_cast<ByteT>(static_cast<uint8_t>(v1 >> 16));
+                    data[i+7] = static_cast<ByteT>(static_cast<uint8_t>(v1 >> 24));
+                }
+            }
+        }
+
+        template<size_t N,
+                 uint32_t K0 = CW_RANDOM_CT(), uint32_t K1 = CW_RANDOM_CT(),
+                 uint32_t K2 = CW_RANDOM_CT(), uint32_t K3 = CW_RANDOM_CT()>
         class encrypted_string {
         private:
             std::array<char, N> data;
             mutable CW_ATOMIC(bool) decrypted{false};
-#if CW_KERNEL_MODE
             mutable CW_MUTEX mutex;
-#else
-            mutable CW_MUTEX mutex;
-#endif
 
-            // compile-time keys (unique per build)
-            static constexpr uint8_t compile_key1 = static_cast<uint8_t>(Key1);
-            static constexpr uint8_t compile_key2 = static_cast<uint8_t>(Key2);
+            static constexpr xtea::key128 compile_key = {{K0, K1, K2, K3}};
 
-            // compile-time encryption (constexpr allows both compile-time and runtime use)
-            static constexpr char encrypt_char(char c, size_t i) {
-                char k1 = compile_key1 + static_cast<char>(i);
-                char k2 = compile_key2 - static_cast<char>(i * 3);
-                char k3 = static_cast<char>((i * i) ^ 0x5A);
-                return c ^ k1 ^ k2 ^ k3;
-            }
-
-            CW_FORCEINLINE void decrypt_impl() const {
-                if(!decrypted.load(0)) {
-                    CW_LOCK_GUARD(mutex);
-
-                    // double-check after acquiring lock
-                    if (!decrypted.load(0)) {
-                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
-
-                        for(size_t i = 0; i < N; ++i) {
-                            // reverse compile-time encryption (XOR is self-inverse)
-                            char k1 = compile_key1 + static_cast<char>(i);
-                            char k2 = compile_key2 - static_cast<char>(i * 3);
-                            char k3 = static_cast<char>((i * i) ^ 0x5A);
-                            mutable_data[i] ^= k1 ^ k2 ^ k3;
-                        }
-                        decrypted.store(true, 0);
-                    }
-                }
-            }
-
-            CW_FORCEINLINE void encrypt_impl() const {
-                if(decrypted.load(0)) {
-                    CW_LOCK_GUARD(mutex);
-
-                    if (decrypted.load(0)) {
-                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
-
-                        for(size_t i = 0; i < N; ++i) {
-                            // re-apply compile-time encryption (XOR is self-inverse)
-                            char k1 = compile_key1 + static_cast<char>(i);
-                            char k2 = compile_key2 - static_cast<char>(i * 3);
-                            char k3 = static_cast<char>((i * i) ^ 0x5A);
-                            mutable_data[i] ^= k1 ^ k2 ^ k3;
-                        }
-                        decrypted.store(false, 0);
-                    }
-                }
+            // no reinterpret_cast - uses templated buffer functions for constexpr compatibility
+            static constexpr std::array<char, N> encrypt_string(const char* str) {
+                std::array<char, N> result{};
+                for (size_t i = 0; i < N; ++i) result[i] = str[i];
+                xtea::encrypt_buffer(result.data(), N, compile_key);
+                return result;
             }
 
         public:
             template<size_t... I>
             constexpr encrypted_string(const char (&str)[N], std::index_sequence<I...>)
-                : data{encrypt_char(str[I], I)...},
-                  decrypted(false) {}
+                : data(encrypt_string(str)), decrypted(false) {}
 
             constexpr encrypted_string(const char (&str)[N])
                 : encrypted_string(str, std::make_index_sequence<N>{}) {}
 
-            CW_FORCEINLINE const char* get() const {
-                decrypt_impl();
+            // noinline + optimization off: prevents LTCG from constant-folding the decrypt
+            CW_NOINLINE const char* get() const {
+                CW_COMPILER_BARRIER();
+                if (!decrypted.load(CW_MO_RELAXED)) {
+                    CW_LOCK_GUARD(mutex);
+                    if (!decrypted.load(CW_MO_RELAXED)) {
+                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
+                        xtea::decrypt_buffer(mutable_data.data(), N, compile_key);
+                        decrypted.store(true, CW_MO_RELAXED);
+                    }
+                }
+                CW_COMPILER_BARRIER();
                 return data.data();
             }
 
-            CW_FORCEINLINE operator const char*() const {
-                return get();
-            }
+            CW_NOINLINE operator const char*() const { return get(); }
 
-            // re-encrypt on destruction
             ~encrypted_string() {
-                encrypt_impl();
+                if (decrypted.load(CW_MO_RELAXED)) {
+                    CW_LOCK_GUARD(mutex);
+                    if (decrypted.load(CW_MO_RELAXED)) {
+                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
+                        xtea::encrypt_buffer(mutable_data.data(), N, compile_key);
+                        decrypted.store(false, CW_MO_RELAXED);
+                    }
+                }
             }
         };
 
         template<size_t N>
         encrypted_string(const char (&)[N]) -> encrypted_string<N>;
 
-        // multi-layer encrypted string with polymorphic decryption
         template<size_t N,
-                 uint8_t Layer1Key = CW_RAND_CT(1, 255),
-                 uint8_t Layer2Key = CW_RAND_CT(1, 255),
-                 uint8_t Layer3Key = CW_RAND_CT(1, 255)>
+                 uint32_t K0 = CW_RANDOM_CT(), uint32_t K1 = CW_RANDOM_CT(),
+                 uint32_t K2 = CW_RANDOM_CT(), uint32_t K3 = CW_RANDOM_CT()>
         class layered_encrypted_string {
         private:
             std::array<char, N> data;
             mutable CW_ATOMIC(bool) decrypted{false};
             mutable CW_ATOMIC(uint32_t) access_count{0};
             mutable CW_MUTEX mutex;
+            mutable xtea::key128 current_key;
 
-            static constexpr char encrypt_multilayer(char c, size_t i) {
-                // layer 1: position-dependent xor
-                char temp = c ^ (Layer1Key + static_cast<char>(i));
+            static constexpr xtea::key128 compile_key = {{K0, K1, K2, K3}};
 
-                // layer 2: rotation + xor
-                temp = static_cast<char>(std::rotl(static_cast<uint8_t>(temp), static_cast<int>((i % 7) + 1)));
-                temp ^= Layer2Key;
-
-                // layer 3: polynomial mixing
-                temp ^= static_cast<char>((i * i + i) ^ Layer3Key);
-
-                return temp;
+            static constexpr std::array<char, N> encrypt_string(const char* str) {
+                std::array<char, N> result{};
+                for (size_t i = 0; i < N; ++i) result[i] = str[i];
+                xtea::encrypt_buffer(result.data(), N, compile_key);
+                return result;
             }
 
-            CW_FORCEINLINE void decrypt_impl() const {
-                if(!decrypted.load(0)) {
-                    CW_LOCK_GUARD(mutex);
-
-                    if (!decrypted.load(0)) {
-                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
-
-                        for(size_t i = 0; i < N; ++i) {
-                            char temp = mutable_data[i];
-
-                            // reverse layer 3
-                            temp ^= static_cast<char>((i * i + i) ^ Layer3Key);
-
-                            // reverse layer 2
-                            temp ^= Layer2Key;
-                            temp = static_cast<char>(std::rotr(static_cast<uint8_t>(temp), static_cast<int>((i % 7) + 1)));
-
-                            // reverse layer 1
-                            temp ^= (Layer1Key + static_cast<char>(i));
-
-                            mutable_data[i] = temp;
-                        }
-                        decrypted.store(true, 0);
-                    }
-                }
-            }
-
-            CW_FORCEINLINE void encrypt_impl() const {
-                if(decrypted.load(0)) {
-                    CW_LOCK_GUARD(mutex);
-
-                    if (decrypted.load(0)) {
-                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
-
-                        for(size_t i = 0; i < N; ++i) {
-                            mutable_data[i] = encrypt_multilayer(mutable_data[i], i);
-                        }
-                        decrypted.store(false, 0);
-                    }
-                }
-            }
-
-            // polymorphic re-encryption on each access
-            CW_FORCEINLINE void morph() const {
-                uint32_t count = access_count.fetch_add(1, 0);
-                if(count % 10 == 0 && decrypted.load(0)) {
-                    encrypt_impl();
-                    decrypt_impl();
-                }
+            // re-key: derive new key by mixing compile-time key with runtime entropy
+            CW_FORCEINLINE void rekey() const {
+                uint64_t entropy = CW_RANDOM_RT();
+                current_key.k[0] = K0 ^ static_cast<uint32_t>(entropy);
+                current_key.k[1] = K1 ^ static_cast<uint32_t>(entropy >> 32);
+                current_key.k[2] = K2 ^ static_cast<uint32_t>(entropy * 0x9E3779B9);
+                current_key.k[3] = K3 ^ static_cast<uint32_t>((entropy >> 16) * 0x6A09E667);
             }
 
         public:
             template<size_t... I>
             constexpr layered_encrypted_string(const char (&str)[N], std::index_sequence<I...>)
-                : data{encrypt_multilayer(str[I], I)...},
-                  decrypted(false) {}
+                : data(encrypt_string(str)), decrypted(false), current_key(compile_key) {}
 
             constexpr layered_encrypted_string(const char (&str)[N])
                 : layered_encrypted_string(str, std::make_index_sequence<N>{}) {}
 
-            CW_FORCEINLINE const char* get() const {
-                decrypt_impl();
-                morph();
+            CW_NOINLINE const char* get() const {
+                CW_COMPILER_BARRIER();
+                if (!decrypted.load(CW_MO_RELAXED)) {
+                    CW_LOCK_GUARD(mutex);
+                    if (!decrypted.load(CW_MO_RELAXED)) {
+                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
+                        xtea::decrypt_buffer(mutable_data.data(), N, current_key);
+                        decrypted.store(true, CW_MO_RELAXED);
+                    }
+                }
+
+                // polymorphic re-encryption every 10 accesses
+                uint32_t count = access_count.fetch_add(1, CW_MO_RELAXED);
+                if (count > 0 && (count % 10) == 0 && decrypted.load(CW_MO_RELAXED)) {
+                    CW_LOCK_GUARD(mutex);
+                    if (decrypted.load(CW_MO_RELAXED)) {
+                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
+                        xtea::encrypt_buffer(mutable_data.data(), N, current_key);
+                        rekey();
+                        xtea::decrypt_buffer(mutable_data.data(), N, current_key);
+                    }
+                }
+
+                CW_COMPILER_BARRIER();
                 return data.data();
             }
 
-            CW_FORCEINLINE operator const char*() const {
-                return get();
-            }
+            CW_NOINLINE operator const char*() const { return get(); }
 
             ~layered_encrypted_string() {
-                encrypt_impl();
+                if (decrypted.load(CW_MO_RELAXED)) {
+                    CW_LOCK_GUARD(mutex);
+                    if (decrypted.load(CW_MO_RELAXED)) {
+                        auto& mutable_data = const_cast<std::array<char, N>&>(data);
+                        xtea::encrypt_buffer(mutable_data.data(), N, current_key);
+                        decrypted.store(false, CW_MO_RELAXED);
+                    }
+                }
             }
         };
 
         template<size_t N>
         layered_encrypted_string(const char (&)[N]) -> layered_encrypted_string<N>;
 
-        // stack-based encrypted string that auto-clears on scope exit
         template<size_t N>
         class stack_encrypted_string {
         private:
             char buffer[N];
 
-            CW_FORCEINLINE void clear_buffer() {
-                for(size_t i = 0; i < N; ++i) {
-                    buffer[i] = static_cast<char>(CW_RANDOM_RT() & 0xFF);
-                }
-                // second pass with different random
-                for(size_t i = 0; i < N; ++i) {
-                    buffer[i] ^= static_cast<char>(CW_RANDOM_RT() & 0xFF);
-                }
-            }
-
         public:
-            stack_encrypted_string(const encrypted_string<N>& enc) {
+            template<size_t M, uint32_t A, uint32_t B, uint32_t C, uint32_t D>
+            stack_encrypted_string(const encrypted_string<M, A, B, C, D>& enc) {
                 const char* decrypted = enc.get();
-                for(size_t i = 0; i < N; ++i) {
+                for (size_t i = 0; i < N && i < M; ++i)
                     buffer[i] = decrypted[i];
-                }
             }
 
             const char* get() const { return buffer; }
             operator const char*() const { return buffer; }
 
             ~stack_encrypted_string() {
-                clear_buffer();
+                // secure wipe: volatile to prevent optimizer removal
+                volatile char* p = buffer;
+                for (size_t i = 0; i < N; ++i)
+                    p[i] = 0;
+                CW_COMPILER_BARRIER();
             }
         };
 
-        // wide string encryption
-        template<size_t N, wchar_t Key1 = static_cast<wchar_t>(CW_RAND_CT(1, 127)), wchar_t Key2 = static_cast<wchar_t>(CW_RAND_CT(1, 127))>
+        template<size_t N,
+                 uint32_t K0 = CW_RANDOM_CT(), uint32_t K1 = CW_RANDOM_CT(),
+                 uint32_t K2 = CW_RANDOM_CT(), uint32_t K3 = CW_RANDOM_CT()>
         class encrypted_wstring {
         private:
+            static constexpr size_t BYTE_LEN = N * sizeof(wchar_t);
             std::array<wchar_t, N> data;
             mutable CW_ATOMIC(bool) decrypted{false};
             mutable CW_MUTEX mutex;
 
-            static constexpr uint16_t compile_key1 = static_cast<uint16_t>(Key1);
-            static constexpr uint16_t compile_key2 = static_cast<uint16_t>(Key2);
+            static constexpr xtea::key128 compile_key = {{K0, K1, K2, K3}};
 
-            static constexpr wchar_t encrypt_char(wchar_t c, size_t i) {
-                wchar_t k1 = static_cast<wchar_t>(compile_key1 + static_cast<uint16_t>(i));
-                wchar_t k2 = static_cast<wchar_t>(compile_key2 - static_cast<uint16_t>(i * 3));
-                wchar_t k3 = static_cast<wchar_t>((i * i) ^ 0x5A5A);
-                return c ^ k1 ^ k2 ^ k3;
-            }
-
-            CW_FORCEINLINE void decrypt_impl() const {
-                if(!decrypted.load(0)) {
-                    CW_LOCK_GUARD(mutex);
-                    if (!decrypted.load(0)) {
-                        auto& mutable_data = const_cast<std::array<wchar_t, N>&>(data);
-                        for(size_t i = 0; i < N; ++i) {
-                            wchar_t k1 = static_cast<wchar_t>(compile_key1 + static_cast<uint16_t>(i));
-                            wchar_t k2 = static_cast<wchar_t>(compile_key2 - static_cast<uint16_t>(i * 3));
-                            wchar_t k3 = static_cast<wchar_t>((i * i) ^ 0x5A5A);
-                            mutable_data[i] ^= k1 ^ k2 ^ k3;
-                        }
-                        decrypted.store(true, 0);
-                    }
+            // constexpr-safe wchar_t encryption: serialize to bytes, encrypt, deserialize
+            static constexpr std::array<wchar_t, N> encrypt_wstring(const wchar_t* str) {
+                std::array<uint8_t, BYTE_LEN> bytes{};
+                for (size_t i = 0; i < N; ++i) {
+                    bytes[i * 2]     = static_cast<uint8_t>(str[i] & 0xFF);
+                    bytes[i * 2 + 1] = static_cast<uint8_t>((str[i] >> 8) & 0xFF);
                 }
-            }
-
-            CW_FORCEINLINE void encrypt_impl() const {
-                if(decrypted.load(0)) {
-                    CW_LOCK_GUARD(mutex);
-                    if (decrypted.load(0)) {
-                        auto& mutable_data = const_cast<std::array<wchar_t, N>&>(data);
-                        for(size_t i = 0; i < N; ++i) {
-                            wchar_t k1 = static_cast<wchar_t>(compile_key1 + static_cast<uint16_t>(i));
-                            wchar_t k2 = static_cast<wchar_t>(compile_key2 - static_cast<uint16_t>(i * 3));
-                            wchar_t k3 = static_cast<wchar_t>((i * i) ^ 0x5A5A);
-                            mutable_data[i] ^= k1 ^ k2 ^ k3;
-                        }
-                        decrypted.store(false, 0);
-                    }
+                xtea::encrypt_buffer(bytes.data(), BYTE_LEN, compile_key);
+                std::array<wchar_t, N> result{};
+                for (size_t i = 0; i < N; ++i) {
+                    result[i] = static_cast<wchar_t>(bytes[i * 2])
+                              | (static_cast<wchar_t>(bytes[i * 2 + 1]) << 8);
                 }
+                return result;
             }
 
         public:
             template<size_t... I>
             constexpr encrypted_wstring(const wchar_t (&str)[N], std::index_sequence<I...>)
-                : data{encrypt_char(str[I], I)...}, decrypted(false) {}
+                : data(encrypt_wstring(str)), decrypted(false) {}
 
             constexpr encrypted_wstring(const wchar_t (&str)[N])
                 : encrypted_wstring(str, std::make_index_sequence<N>{}) {}
 
-            CW_FORCEINLINE const wchar_t* get() const {
-                decrypt_impl();
+            CW_NOINLINE const wchar_t* get() const {
+                CW_COMPILER_BARRIER();
+                if (!decrypted.load(CW_MO_RELAXED)) {
+                    CW_LOCK_GUARD(mutex);
+                    if (!decrypted.load(CW_MO_RELAXED)) {
+                        auto& mutable_data = const_cast<std::array<wchar_t, N>&>(data);
+                        uint8_t bytes[BYTE_LEN];
+                        for (size_t i = 0; i < N; ++i) {
+                            bytes[i * 2]     = static_cast<uint8_t>(mutable_data[i] & 0xFF);
+                            bytes[i * 2 + 1] = static_cast<uint8_t>((mutable_data[i] >> 8) & 0xFF);
+                        }
+                        xtea::decrypt_buffer(bytes, BYTE_LEN, compile_key);
+                        for (size_t i = 0; i < N; ++i) {
+                            mutable_data[i] = static_cast<wchar_t>(bytes[i * 2])
+                                            | (static_cast<wchar_t>(bytes[i * 2 + 1]) << 8);
+                        }
+                        decrypted.store(true, CW_MO_RELAXED);
+                    }
+                }
+                CW_COMPILER_BARRIER();
                 return data.data();
             }
 
-            CW_FORCEINLINE operator const wchar_t*() const { return get(); }
+            CW_NOINLINE operator const wchar_t*() const { return get(); }
 
-            ~encrypted_wstring() { encrypt_impl(); }
+            ~encrypted_wstring() {
+                if (decrypted.load(CW_MO_RELAXED)) {
+                    CW_LOCK_GUARD(mutex);
+                    if (decrypted.load(CW_MO_RELAXED)) {
+                        auto& mutable_data = const_cast<std::array<wchar_t, N>&>(data);
+                        uint8_t bytes[BYTE_LEN];
+                        for (size_t i = 0; i < N; ++i) {
+                            bytes[i * 2]     = static_cast<uint8_t>(mutable_data[i] & 0xFF);
+                            bytes[i * 2 + 1] = static_cast<uint8_t>((mutable_data[i] >> 8) & 0xFF);
+                        }
+                        xtea::encrypt_buffer(bytes, BYTE_LEN, compile_key);
+                        for (size_t i = 0; i < N; ++i) {
+                            mutable_data[i] = static_cast<wchar_t>(bytes[i * 2])
+                                            | (static_cast<wchar_t>(bytes[i * 2 + 1]) << 8);
+                        }
+                        decrypted.store(false, CW_MO_RELAXED);
+                    }
+                }
+            }
         };
 
         template<size_t N>
         encrypted_wstring(const wchar_t (&)[N]) -> encrypted_wstring<N>;
     }
 
-    // macro for easy string encryption with immediate re-encryption
+    // string encryption macros
+    // constinit ensures compile-time initialization (encrypted data in .rdata, not plaintext)
 #define CW_STR(s) \
-    static_cast<const char*>(([]() -> const char* { \
-        static cloakwork::string_encrypt::encrypted_string<sizeof(s)> enc(s); \
-        int dummy = static_cast<int>(CW_RANDOM_RT() & 1); \
+    static_cast<const char*>(([]() CW_NOINLINE -> const char* { \
+        constinit static cloakwork::string_encrypt::encrypted_string<sizeof(s)> enc(s); \
         CW_COMPILER_BARRIER(); \
-        const char* result = dummy >= 0 ? enc.get() : nullptr; \
-        return result; \
+        return enc.get(); \
     }()))
 
-// layered encryption macro
 #define CW_STR_LAYERED(s) \
-    static_cast<const char*>(([]() -> const char* { \
-        static cloakwork::string_encrypt::layered_encrypted_string<sizeof(s)> enc(s); \
-        int dummy = static_cast<int>(CW_RANDOM_RT() & 1); \
+    static_cast<const char*>(([]() CW_NOINLINE -> const char* { \
+        constinit static cloakwork::string_encrypt::layered_encrypted_string<sizeof(s)> enc(s); \
         CW_COMPILER_BARRIER(); \
-        return dummy >= 0 ? enc.get() : nullptr; \
+        return enc.get(); \
     }()))
 
-// stack-based encrypted string with tight scope control
 #define CW_STR_STACK(s) \
-    ([&]() { \
-        static cloakwork::string_encrypt::encrypted_string<sizeof(s)> enc(s); \
+    ([&]() CW_NOINLINE { \
+        constinit static cloakwork::string_encrypt::encrypted_string<sizeof(s)> enc(s); \
         return cloakwork::string_encrypt::stack_encrypted_string<sizeof(s)>(enc); \
     }())
 
-// wide string encryption macro
 #define CW_WSTR(s) \
-    static_cast<const wchar_t*>(([]() -> const wchar_t* { \
-        static cloakwork::string_encrypt::encrypted_wstring<sizeof(s)/sizeof(wchar_t)> enc(s); \
-        int dummy = static_cast<int>(CW_RANDOM_RT() & 1); \
+    static_cast<const wchar_t*>(([]() CW_NOINLINE -> const wchar_t* { \
+        constinit static cloakwork::string_encrypt::encrypted_wstring<sizeof(s)/sizeof(wchar_t)> enc(s); \
         CW_COMPILER_BARRIER(); \
-        return dummy >= 0 ? enc.get() : nullptr; \
+        return enc.get(); \
     }()))
 
+// stack string builder - builds string char-by-char, never exists as literal in binary
+// usage: CW_STACK_STR(name, 'h','e','l','l','o','\0')
+#define CW_STACK_STR(name, ...) \
+    char name[] = { __VA_ARGS__ }; \
+    do { \
+        constexpr uint8_t _cw_ssk = static_cast<uint8_t>(CW_RANDOM_CT() | 1); \
+        volatile uint8_t* _cw_ssp = reinterpret_cast<volatile uint8_t*>(name); \
+        for (size_t _cw_ssi = 0; _cw_ssi < sizeof(name); ++_cw_ssi) \
+            _cw_ssp[_cw_ssi] = _cw_ssp[_cw_ssi]; \
+        CW_COMPILER_BARRIER(); \
+    } while(0)
+
 #else
-    // no-op when string encryption is disabled
     #define CW_STR(s) (s)
     #define CW_STR_LAYERED(s) (s)
     #define CW_STR_STACK(s) (s)
     #define CW_WSTR(s) (s)
+    #define CW_STACK_STR(name, ...) char name[] = { __VA_ARGS__ }
 #endif
-
-    // =================================================================
-    // integer and data obfuscation with MBA (mixed boolean arithmetic)
-    // =================================================================
 
 #if CW_ENABLE_VALUE_OBFUSCATION
 
 #if CW_KERNEL_MODE
-    // kernel mode: use enable_if instead of concepts
     namespace detail {
         template<typename T>
         struct is_integral_type : std::is_integral<T> {};
@@ -2396,7 +2709,6 @@ namespace cloakwork {
         struct is_arithmetic_type : std::is_arithmetic<T> {};
     }
 
-    // mixed boolean arithmetic obfuscation
     namespace mba {
         // MBA identity: x + y = (x ^ y) + 2 * (x & y)
         template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
@@ -2471,32 +2783,102 @@ namespace cloakwork {
             set(val);
         }
 
-        CW_FORCEINLINE void set(T val) {
+        CW_NOINLINE void set(T val) {
+            CW_COMPILER_BARRIER();
             if constexpr(std::is_integral_v<T>) {
-                // multi-step obfuscation for integers using MBA + XOR
                 T temp = mba::add_mba(val, add_key);
-                value = temp ^ xor_key;
-            } else if constexpr(sizeof(T) == sizeof(uint64_t)) {
-                // for floating point, use reinterpret
-                uint64_t bits;
-                memcpy(&bits, &val, sizeof(val));
-                uint64_t key_bits;
-                memcpy(&key_bits, &xor_key, sizeof(xor_key));
-                bits ^= key_bits;
-                memcpy(&value, &bits, sizeof(value));
-            } else if constexpr(sizeof(T) == sizeof(uint32_t)) {
+                temp ^= xor_key;
+                value = mba::add_mba(temp, static_cast<T>(xor_key & 0xFF));
+            } else {
+                // floating point: byte-level xor via memcpy to avoid NaN UB
+                uint8_t val_bytes[sizeof(T)];
+                uint8_t key_bytes[sizeof(T)];
+                memcpy(val_bytes, &val, sizeof(T));
+                memcpy(key_bytes, &xor_key, sizeof(T));
+                for (size_t i = 0; i < sizeof(T); ++i)
+                    val_bytes[i] ^= key_bytes[i];
+                memcpy(&value, val_bytes, sizeof(T));
+            }
+            CW_COMPILER_BARRIER();
+        }
+
+        CW_NOINLINE T get() const {
+            CW_COMPILER_BARRIER();
+            if ((++access_count % 1000) == 0) {
+                CW_INLINE_CHECK();
+            }
+
+            if constexpr(std::is_integral_v<T>) {
+                T temp = mba::sub_mba(value, static_cast<T>(xor_key & 0xFF));
+                temp ^= xor_key;
+                T out = mba::sub_mba(temp, add_key);
+                CW_COMPILER_BARRIER();
+                return out;
+            } else {
+                uint8_t val_bytes[sizeof(T)];
+                uint8_t key_bytes[sizeof(T)];
+                memcpy(val_bytes, &value, sizeof(T));
+                memcpy(key_bytes, &xor_key, sizeof(T));
+                for (size_t i = 0; i < sizeof(T); ++i)
+                    val_bytes[i] ^= key_bytes[i];
+                T result;
+                memcpy(&result, val_bytes, sizeof(T));
+                CW_COMPILER_BARRIER();
+                return result;
+            }
+        }
+
+        CW_FORCEINLINE operator T() const { return get(); }
+        CW_FORCEINLINE obfuscated_value& operator=(T val) { set(val); return *this; }
+    };
+
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    class mba_obfuscated {
+    private:
+        T encoded{};
+        T key1{};
+        T key2{};
+
+    public:
+        mba_obfuscated() {
+            key1 = static_cast<T>(CW_RANDOM_RT());
+            key2 = static_cast<T>(CW_RANDOM_RT());
+            set(static_cast<T>(0));
+        }
+
+        mba_obfuscated(T val) {
+            key1 = static_cast<T>(CW_RANDOM_RT());
+            key2 = static_cast<T>(CW_RANDOM_RT());
+            set(val);
+        }
+
+        CW_NOINLINE void set(T val) {
+            CW_COMPILER_BARRIER();
+            T temp = mba::add_mba(val, key1);
+            encoded = temp ^ key2;
+            CW_COMPILER_BARRIER();
+        }
+
+        CW_NOINLINE T get() const {
+            CW_COMPILER_BARRIER();
+            T temp = encoded ^ key2;
+            T out = mba::sub_mba(temp, key1);
+            CW_COMPILER_BARRIER();
+            return out;
+        }
+
+        CW_FORCEINLINE operator T() const { return get(); }
+        CW_FORCEINLINE mba_obfuscated& operator=(T val) { set(val); return *this; }
+    };
 
 #else
-    // user mode: use C++20 concepts
 
-    // concepts for type constraints
     template<typename T>
     concept Integral = std::is_integral_v<T>;
 
     template<typename T>
     concept Arithmetic = std::is_arithmetic_v<T>;
 
-    // mixed boolean arithmetic obfuscation
     namespace mba {
         // MBA identity: x + y = (x ^ y) + 2 * (x & y)
         template<Integral T>
@@ -2571,48 +2953,49 @@ namespace cloakwork {
             set(val);
         }
 
-        CW_FORCEINLINE void set(T val) {
+        CW_NOINLINE void set(T val) {
+            CW_COMPILER_BARRIER();
             if constexpr(Integral<T>) {
-                // multi-step obfuscation for integers using MBA + XOR
+                // multi-step obfuscation: mba then xor then mba again for deeper chain
                 T temp = mba::add_mba(val, add_key);
-                value = temp ^ xor_key;
-            } else if constexpr(sizeof(T) == sizeof(uint64_t)) {
-                uint64_t bits = std::bit_cast<uint64_t>(val);
-                uint64_t key_bits = std::bit_cast<uint64_t>(xor_key);
-                bits ^= key_bits;
-                value = std::bit_cast<T>(bits);
-            } else if constexpr(sizeof(T) == sizeof(uint32_t)) {
-#endif
-                uint32_t bits = std::bit_cast<uint32_t>(val);
-                uint32_t key_bits = std::bit_cast<uint32_t>(xor_key);
-                bits ^= key_bits;
-                value = std::bit_cast<T>(bits);
+                temp ^= xor_key;
+                value = mba::add_mba(temp, static_cast<T>(xor_key & 0xFF));
             } else {
-                value = val;
+                // floating point: byte-level xor via memcpy to avoid NaN UB from bit_cast XOR
+                uint8_t val_bytes[sizeof(T)];
+                uint8_t key_bytes[sizeof(T)];
+                memcpy(val_bytes, &val, sizeof(T));
+                memcpy(key_bytes, &xor_key, sizeof(T));
+                for (size_t i = 0; i < sizeof(T); ++i)
+                    val_bytes[i] ^= key_bytes[i];
+                memcpy(&value, val_bytes, sizeof(T));
             }
+            CW_COMPILER_BARRIER();
         }
 
-        CW_FORCEINLINE T get() const {
-            // inline anti-debug check every N accesses
+        CW_NOINLINE T get() const {
+            CW_COMPILER_BARRIER();
             if ((++access_count % 1000) == 0) {
                 CW_INLINE_CHECK();
             }
 
             if constexpr(Integral<T>) {
-                T temp = value ^ xor_key;
-                return mba::sub_mba(temp, add_key);
-            } else if constexpr(sizeof(T) == sizeof(uint64_t)) {
-                uint64_t bits = std::bit_cast<uint64_t>(value);
-                uint64_t key_bits = std::bit_cast<uint64_t>(xor_key);
-                bits ^= key_bits;
-                return std::bit_cast<T>(bits);
-            } else if constexpr(sizeof(T) == sizeof(uint32_t)) {
-                uint32_t bits = std::bit_cast<uint32_t>(value);
-                uint32_t key_bits = std::bit_cast<uint32_t>(xor_key);
-                bits ^= key_bits;
-                return std::bit_cast<T>(bits);
+                T temp = mba::sub_mba(value, static_cast<T>(xor_key & 0xFF));
+                temp ^= xor_key;
+                T out = mba::sub_mba(temp, add_key);
+                CW_COMPILER_BARRIER();
+                return out;
             } else {
-                return value;
+                uint8_t val_bytes[sizeof(T)];
+                uint8_t key_bytes[sizeof(T)];
+                memcpy(val_bytes, &value, sizeof(T));
+                memcpy(key_bytes, &xor_key, sizeof(T));
+                for (size_t i = 0; i < sizeof(T); ++i)
+                    val_bytes[i] ^= key_bytes[i];
+                T result;
+                memcpy(&result, val_bytes, sizeof(T));
+                CW_COMPILER_BARRIER();
+                return result;
             }
         }
 
@@ -2620,7 +3003,6 @@ namespace cloakwork {
         CW_FORCEINLINE obfuscated_value& operator=(T val) { set(val); return *this; }
     };
 
-    // enhanced obfuscation using only MBA transformations
     template<Integral T>
     class mba_obfuscated {
     private:
@@ -2641,81 +3023,78 @@ namespace cloakwork {
             set(val);
         }
 
-        CW_FORCEINLINE void set(T val) {
+        CW_NOINLINE void set(T val) {
+            CW_COMPILER_BARRIER();
             // encode using MBA: encoded = (val + key1) ^ key2
             T temp = mba::add_mba(val, key1);
             encoded = temp ^ key2;
+            CW_COMPILER_BARRIER();
         }
 
-        CW_FORCEINLINE T get() const {
+        CW_NOINLINE T get() const {
+            CW_COMPILER_BARRIER();
             // decode using MBA: val = (encoded ^ key2) - key1
             T temp = encoded ^ key2;
-            return mba::sub_mba(temp, key1);
+            T out = mba::sub_mba(temp, key1);
+            CW_COMPILER_BARRIER();
+            return out;
         }
 
         CW_FORCEINLINE operator T() const { return get(); }
         CW_FORCEINLINE mba_obfuscated& operator=(T val) { set(val); return *this; }
     };
 
-    // =================================================================
-    // boolean obfuscation
-    // =================================================================
+#endif // CW_KERNEL_MODE (value obfuscation kernel/user split)
 
     namespace bool_obfuscation {
 
-        // obfuscated true using multiple opaque predicates and runtime values
-        template<int N = CW_RAND_CT(1, 1000)>
-        CW_FORCEINLINE bool obfuscated_true() {
-            // runtime value prevents constant folding
-            volatile int runtime_val = static_cast<int>(reinterpret_cast<uintptr_t>(&runtime_val) & 0xFF);
-            int x = N + runtime_val;
+        // CW_NOINLINE prevents LTCG from constant-folding the result
+        template<int N = CW_RAND_CT(0, 7)>
+        CW_NOINLINE bool obfuscated_true() {
+            volatile int seed = static_cast<int>(reinterpret_cast<uintptr_t>(&seed) & 0xFF) + N;
             CW_COMPILER_BARRIER();
 
-            // multiple always-true predicates combined
-            // property: product of consecutive integers is always even
-            bool result = ((x * (x + 1)) % 2) == 0;
-
-            // property: x OR x is always x
-            result = result && ((x | x) == x);
-
-            // property: x XOR 0 is always x
-            result = result && ((x ^ 0) == x);
-
-            // property: x AND x is always x
-            result = result && ((x & x) == x);
-
-            // MBA identity: ~(~x) == x
-            result = result && ((~(~x)) == x);
-
+            // stack pointer hash: runtime address through non-invertible transform
+            uintptr_t sp = reinterpret_cast<uintptr_t>(&seed);
+            uint32_t h = static_cast<uint32_t>(sp) ^ static_cast<uint32_t>(seed);
+            h *= 0x45D9F3Bu;
+            h ^= h >> 16;
+            // h + ~h is always 0xFFFFFFFF regardless of input
+            volatile uint32_t complement_sum = h + ~h;
             CW_COMPILER_BARRIER();
-            return result;
-        }
+            bool result = (complement_sum == 0xFFFFFFFFu);
 
-        // obfuscated false using multiple opaque predicates
-        template<int N = CW_RAND_CT(1, 1000)>
-        CW_FORCEINLINE bool obfuscated_false() {
-            volatile int runtime_val = static_cast<int>(reinterpret_cast<uintptr_t>(&runtime_val) & 0xFF);
-            int x = N + runtime_val;
+            // dual-path comparison: same runtime value computed twice independently
+            volatile uint32_t path_a = static_cast<uint32_t>(sp & 0xFF);
+            uint32_t va = path_a;
+            va = (va * 7u + 3u) & 0xFFu;
+            volatile uint32_t result_a = va;
             CW_COMPILER_BARRIER();
+            volatile uint32_t path_b = static_cast<uint32_t>(sp & 0xFF);
+            uint32_t vb = path_b;
+            vb = (vb * 7u + 3u) & 0xFFu;
+            volatile uint32_t result_b = vb;
+            CW_COMPILER_BARRIER();
+            result = result && (result_a == result_b);
 
-            // multiple always-false predicates combined
-            // property: x AND (NOT x) is always 0
-            bool result = ((x & (~x)) != 0);
-
-            // property: x XOR x is always 0
-            result = result || ((x ^ x) != 0);
-
-            // property: impossible condition
-            result = result || (x * x < 0);
-
-            // MBA identity: (x - x) is always 0
-            result = result || (mba::sub_mba(x, x) != 0);
-
+#if defined(_WIN32)
+            // rdtsc XOR with stack: (x | ~x) is always all-ones
+            uint64_t tsc = __rdtsc();
+            CW_COMPILER_BARRIER();
+            uint64_t mixed = tsc ^ sp;
+            volatile uint64_t check = mixed | ~mixed;
+            CW_COMPILER_BARRIER();
+            result = result && (check == ~0ULL);
+#endif
             CW_COMPILER_BARRIER();
             return result;
         }
 
-        // obfuscate a boolean expression through indirection
+        template<int N = CW_RAND_CT(0, 7)>
+        CW_NOINLINE bool obfuscated_false() {
+            return !obfuscated_true<N>();
+        }
+
         template<int N = CW_RAND_CT(1, 1000)>
         CW_FORCEINLINE bool obfuscate_bool(bool value) {
             CW_COMPILER_BARRIER();
@@ -2737,7 +3116,6 @@ namespace cloakwork {
             return result;
         }
 
-        // class for storing obfuscated boolean values with anti-pattern storage
         template<uint8_t Key1 = static_cast<uint8_t>(CW_RAND_CT(1, 255)),
                  uint8_t Key2 = static_cast<uint8_t>(CW_RAND_CT(1, 255)),
                  uint8_t Key3 = static_cast<uint8_t>(CW_RAND_CT(1, 255))>
@@ -2806,7 +3184,6 @@ namespace cloakwork {
             CW_FORCEINLINE operator bool() const { return get(); }
             CW_FORCEINLINE obfuscated_bool& operator=(bool value) { set(value); return *this; }
 
-            // logical operators
             CW_FORCEINLINE obfuscated_bool operator!() const {
                 return obfuscated_bool(!get());
             }
@@ -2821,12 +3198,10 @@ namespace cloakwork {
         };
     }
 
-    // convenience macros for boolean obfuscation
     #define CW_TRUE (cloakwork::bool_obfuscation::obfuscated_true<CW_RAND_CT(1, 1000)>())
     #define CW_FALSE (cloakwork::bool_obfuscation::obfuscated_false<CW_RAND_CT(1, 1000)>())
     #define CW_BOOL(x) (cloakwork::bool_obfuscation::obfuscate_bool<CW_RAND_CT(1, 1000)>(x))
 
-    // convenience macros for MBA operations
     #define CW_ADD(a, b) (cloakwork::mba::add_mba((a), (b)))
     #define CW_SUB(a, b) (cloakwork::mba::sub_mba((a), (b)))
     #define CW_AND(a, b) (cloakwork::mba::and_mba((a), (b)))
@@ -2864,7 +3239,6 @@ namespace cloakwork {
     #define CW_AND(a, b) ((a) & (b))
     #define CW_OR(a, b) ((a) | (b))
 
-    // no-op boolean obfuscation when disabled
     namespace bool_obfuscation {
         template<int N = 0> inline bool obfuscated_true() { return true; }
         template<int N = 0> inline bool obfuscated_false() { return false; }
@@ -2891,137 +3265,355 @@ namespace cloakwork {
     #define CW_BOOL(x) (x)
 #endif
 
-    // =================================================================
-    // control flow obfuscation
-    // =================================================================
-
 #if CW_ENABLE_CONTROL_FLOW
     namespace control_flow {
 
-        // improved opaque predicates using runtime values
-        template<int N = CW_RAND_CT(1, 100)>
-        CW_FORCEINLINE bool opaque_true() {
-            // use runtime address for non-trivial computation
-            volatile int runtime_val = reinterpret_cast<uintptr_t>(&runtime_val) & 0xFF;
-            int x = N + runtime_val;
-            int y = N * 2 + runtime_val;
-            CW_COMPILER_BARRIER();
+        // decompiler-resistant opaque predicates
+        // these use patterns that ida/hex-rays cannot simplify:
+        // memory aliasing, environment queries, pointer arithmetic, mixed math
 
-            // mathematical property: (x * (x+1)) is always even
-            bool result = ((x * (x + 1)) % 2) == 0;
-
-            // additional non-obvious properties
-            result = result && ((x * x - y * y + y * y) == (x * x));
-            result = result && ((x | y) >= x);
-
-            CW_COMPILER_BARRIER();
-            return result;
-        }
-
-        template<int N = CW_RAND_CT(1, 100)>
-        CW_FORCEINLINE bool opaque_false() {
-            volatile int runtime_val = reinterpret_cast<uintptr_t>(&runtime_val) & 0xFF;
-            int x = N + runtime_val;
-            CW_COMPILER_BARRIER();
-
-            // property that's always false: x^2 < 0 for real numbers
-            bool result = (x * x) < 0;
-            result = result || ((x & (~x)) != 0);
-            result = result || ((x ^ x) != 0);
-
-            CW_COMPILER_BARRIER();
-            return result;
-        }
-
-        // control flow flattening via state machine with runtime keys
-        template<typename Func>
-        class flattened_flow {
-        private:
-            // runtime-generated state values
-            int state_start;
-            int state_exec;
-            int state_end;
-            int state_fake1;
-            int state_fake2;
-            uint32_t state_xor_key;
-
-            void init_states() {
-                state_xor_key = static_cast<uint32_t>(CW_RANDOM_RT());
-                state_start = CW_RAND_RT(100, 200);
-                state_exec = CW_RAND_RT(201, 300);
-                state_end = CW_RAND_RT(301, 400);
-                state_fake1 = CW_RAND_RT(401, 500);
-                state_fake2 = CW_RAND_RT(501, 600);
-            }
-
-        public:
-            flattened_flow() {
-                init_states();
-            }
-
-            template<typename... Args>
-            CW_FORCEINLINE auto execute(Func func, Args&&... args) -> decltype(func(std::forward<Args>(args)...)) {
-                int state = state_start;
-                int next_state = 0;
+        namespace opaque_detail {
+            // predicate 0: hash stack pointer through non-trivial computation
+            // the compiler cannot determine the stack address at compile time,
+            // and the multiply-xor-shift chain is non-invertible for static analysis
+            CW_NOINLINE bool stack_hash_true(int seed) {
+                volatile int anchor = seed;
+                uintptr_t sp = reinterpret_cast<uintptr_t>(&anchor);
                 CW_COMPILER_BARRIER();
+                // non-trivial hash: multiply by large prime, xor-shift, check parity of popcount
+                uint32_t h = static_cast<uint32_t>(sp);
+                h ^= static_cast<uint32_t>(seed);
+                h *= 0x45D9F3Bu;
+                h ^= h >> 16;
+                h *= 0x119DE1F3u;
+                h ^= h >> 13;
+                // popcount of any 32-bit value added to its complement is always 32
+                uint32_t complement = ~h;
+                volatile uint32_t combined = h + complement;
+                CW_COMPILER_BARRIER();
+                // h + ~h == 0xFFFFFFFF for any h, so combined is always 0xFFFFFFFF
+                return combined == 0xFFFFFFFFu;
+            }
 
+            // predicate 1: rdtsc XOR with stack address
+            // both values are runtime-only; the XOR and modular arithmetic
+            // produce a result the optimizer cannot statically resolve
+            CW_NOINLINE bool tsc_stack_true() {
+#if defined(_WIN32)
+                volatile int anchor = 0;
+                uintptr_t sp = reinterpret_cast<uintptr_t>(&anchor);
+                uint64_t tsc = __rdtsc();
+                CW_COMPILER_BARRIER();
+                uint64_t mixed = tsc ^ sp;
+                // (x | ~x) is always all-ones for any x
+                volatile uint64_t check = mixed | ~mixed;
+                CW_COMPILER_BARRIER();
+                return check == ~0ULL;
+#elif CW_KERNEL_MODE
+                volatile int anchor = 0;
+                uintptr_t sp = reinterpret_cast<uintptr_t>(&anchor);
+                uint64_t tsc = __rdtsc();
+                CW_COMPILER_BARRIER();
+                uint64_t mixed = tsc ^ sp;
+                volatile uint64_t check = mixed | ~mixed;
+                CW_COMPILER_BARRIER();
+                return check == ~0ULL;
+#else
+                return true;
+#endif
+            }
+
+            // predicate 2: thread ID through non-invertible transform
+            // GetCurrentThreadId is a runtime call, and the transform chain
+            // ensures the optimizer cannot prove the final comparison
+            CW_NOINLINE bool tid_transform_true() {
+#if defined(_WIN32) && !CW_KERNEL_MODE
+                uint32_t tid = GetCurrentThreadId();
+                CW_COMPILER_BARRIER();
+                // Collatz-like transform - non-invertible, runtime-dependent
+                uint32_t v = tid | 0x100u; // ensure nonzero
+                volatile uint32_t orig = v;
+                for (volatile int i = 0; i < 3; ++i) {
+                    v = (v & 1) ? (v * 3u + 1u) : (v >> 1);
+                }
+                CW_COMPILER_BARRIER();
+                // (orig ^ orig) is always 0, but compiler can't prove it
+                // through the volatile indirection and loop side effects
+                volatile uint32_t self_xor = orig ^ orig;
+                return self_xor == 0;
+#elif CW_KERNEL_MODE
+                uintptr_t tid = HandleToULong(PsGetCurrentThreadId());
+                CW_COMPILER_BARRIER();
+                uint32_t v = static_cast<uint32_t>(tid) | 0x100u;
+                volatile uint32_t orig = v;
+                for (volatile int i = 0; i < 3; ++i) {
+                    v = (v & 1) ? (v * 3u + 1u) : (v >> 1);
+                }
+                CW_COMPILER_BARRIER();
+                volatile uint32_t self_xor = orig ^ orig;
+                return self_xor == 0;
+#else
+                return true;
+#endif
+            }
+
+            // predicate 3: multiply-accumulate with runtime stack entropy
+            // uses the address of a local as entropy, runs it through a
+            // sequence of operations that always produces a known bit pattern
+            CW_NOINLINE bool mac_entropy_true(int seed) {
+                volatile int anchor = seed;
+                uint32_t addr_bits = static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(&anchor));
+                CW_COMPILER_BARRIER();
+                // Feistel-like round: split, mix, recombine
+                uint16_t lo = static_cast<uint16_t>(addr_bits);
+                uint16_t hi = static_cast<uint16_t>(addr_bits >> 16);
+                uint16_t mixed = hi ^ (lo * 0x7Fu + static_cast<uint16_t>(seed));
+                // (x - x) is always 0, but through volatile the compiler
+                // cannot fold the subtract away
+                volatile uint16_t a = mixed;
+                volatile uint16_t b = mixed;
+                CW_COMPILER_BARRIER();
+                volatile int16_t diff = static_cast<int16_t>(a - b);
+                return diff == 0;
+            }
+
+            // predicate 4: compare two independently computed representations of
+            // the same runtime value; compiler cannot prove equality across
+            // volatile stores and reloads with arithmetic in between
+            CW_NOINLINE bool dual_path_true() {
+                volatile int anchor = 42;
+                uintptr_t base = reinterpret_cast<uintptr_t>(&anchor);
+                CW_COMPILER_BARRIER();
+                // path A: lower 8 bits through multiply-add
+                volatile uint32_t path_a = static_cast<uint32_t>(base & 0xFF);
+                uint32_t va = path_a;
+                va = (va * 7u + 3u) & 0xFFu;
+                va = (va * 11u + 5u) & 0xFFu;
+                volatile uint32_t result_a = va;
+                CW_COMPILER_BARRIER();
+                // path B: same computation on same input
+                volatile uint32_t path_b = static_cast<uint32_t>(base & 0xFF);
+                uint32_t vb = path_b;
+                vb = (vb * 7u + 3u) & 0xFFu;
+                vb = (vb * 11u + 5u) & 0xFFu;
+                volatile uint32_t result_b = vb;
+                CW_COMPILER_BARRIER();
+                return result_a == result_b;
+            }
+
+            // predicate 5: use ReturnAddress as entropy source;
+            // the return address is purely runtime and varies per call site
+            CW_NOINLINE bool retaddr_true() {
+#if defined(_MSC_VER)
+                uintptr_t ra = reinterpret_cast<uintptr_t>(_ReturnAddress());
+#elif defined(__GNUC__)
+                uintptr_t ra = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+#else
+                uintptr_t ra = 1;
+#endif
+                CW_COMPILER_BARRIER();
+                // any value XOR'd with itself is zero
+                volatile uintptr_t v = ra;
+                CW_COMPILER_BARRIER();
+                volatile uintptr_t check = v ^ v;
+                CW_COMPILER_BARRIER();
+                return check == 0;
+            }
+
+            // predicate 6: process/module base address through hash
+            CW_NOINLINE bool module_hash_true() {
+#if defined(_WIN32) && !CW_KERNEL_MODE
+                uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
+                CW_COMPILER_BARRIER();
+                uint32_t h = static_cast<uint32_t>(base);
+                h *= 0x85EBCA6Bu;
+                h ^= h >> 13;
+                h *= 0xC2B2AE35u;
+                // (h & 0) is always 0 - but the hash chain prevents
+                // the optimizer from seeing through to the constant
+                volatile uint32_t masked = h & 0u;
+                CW_COMPILER_BARRIER();
+                return masked == 0;
+#elif CW_KERNEL_MODE
+                uintptr_t proc = reinterpret_cast<uintptr_t>(PsGetCurrentProcess());
+                CW_COMPILER_BARRIER();
+                uint32_t h = static_cast<uint32_t>(proc);
+                h *= 0x85EBCA6Bu;
+                h ^= h >> 13;
+                h *= 0xC2B2AE35u;
+                volatile uint32_t masked = h & 0u;
+                CW_COMPILER_BARRIER();
+                return masked == 0;
+#else
+                return true;
+#endif
+            }
+
+            // predicate 7: rdtsc difference is always non-negative
+            // two consecutive rdtsc calls always produce t2 >= t1 on the same core,
+            // and the subtraction through volatile prevents constant folding
+            CW_NOINLINE bool tsc_delta_true() {
+#if defined(_WIN32)
+                uint64_t t1 = __rdtsc();
+                CW_COMPILER_BARRIER();
+                volatile int dummy = 0;
+                (void)dummy;
+                CW_COMPILER_BARRIER();
+                uint64_t t2 = __rdtsc();
+                CW_COMPILER_BARRIER();
+                // t2 - t1 is always >= 0 (unsigned), and never == UINT64_MAX
+                // in practice; but more importantly the compiler cannot
+                // determine the actual values of t1 or t2
+                volatile uint64_t delta = t2 - t1;
+                // delta < some huge value is always true
+                return delta < 0xFFFFFFFF00000000ULL;
+#else
+                return true;
+#endif
+            }
+        }
+
+        // rotate between predicate types per call site using compile-time random
+        // CW_NOINLINE prevents LTCG from inlining and resolving the predicate chain
+        template<int N = CW_RAND_CT(0, 7)>
+        CW_NOINLINE bool opaque_true() {
+            volatile int seed = static_cast<int>(reinterpret_cast<uintptr_t>(&seed) & 0xFF) + N;
+            CW_COMPILER_BARRIER();
+
+            // compile-time selection of predicate combination
+            constexpr int primary = N % 8;
+            constexpr int secondary = (N * 3 + 1) % 8;
+
+            bool result;
+            if constexpr (primary == 0) result = opaque_detail::stack_hash_true(seed);
+            else if constexpr (primary == 1) result = opaque_detail::tsc_stack_true();
+            else if constexpr (primary == 2) result = opaque_detail::tid_transform_true();
+            else if constexpr (primary == 3) result = opaque_detail::mac_entropy_true(seed);
+            else if constexpr (primary == 4) result = opaque_detail::dual_path_true();
+            else if constexpr (primary == 5) result = opaque_detail::retaddr_true();
+            else if constexpr (primary == 6) result = opaque_detail::module_hash_true();
+            else result = opaque_detail::tsc_delta_true();
+
+            // chain with a second predicate for extra confusion
+            if constexpr (secondary == 0) result = result && opaque_detail::stack_hash_true(seed + 1);
+            else if constexpr (secondary == 1) result = result && opaque_detail::tsc_stack_true();
+            else if constexpr (secondary == 2) result = result && opaque_detail::tid_transform_true();
+            else if constexpr (secondary == 3) result = result && opaque_detail::mac_entropy_true(seed + 1);
+            else if constexpr (secondary == 4) result = result && opaque_detail::dual_path_true();
+            else if constexpr (secondary == 5) result = result && opaque_detail::retaddr_true();
+            else if constexpr (secondary == 6) result = result && opaque_detail::module_hash_true();
+            else result = result && opaque_detail::tsc_delta_true();
+
+            CW_COMPILER_BARRIER();
+            return result;
+        }
+
+        template<int N = CW_RAND_CT(0, 7)>
+        CW_NOINLINE bool opaque_false() {
+            // negate a true predicate - same decompiler resistance
+            return !opaque_true<N>();
+        }
+
+        // control flow flattening via switch-case state machine
+        // generates a real dispatcher that IDA/Hex-Rays shows as a state machine
+        // state transitions are XOR-encoded with a compile-time key
+        template<typename Func,
+                 uint32_t XK = CW_RANDOM_CT(),
+                 uint32_t S0 = CW_RAND_CT(10, 99),
+                 uint32_t S1 = CW_RAND_CT(100, 199),
+                 uint32_t S2 = CW_RAND_CT(200, 299),
+                 uint32_t S3 = CW_RAND_CT(300, 399),
+                 uint32_t S4 = CW_RAND_CT(400, 499),
+                 uint32_t S5 = CW_RAND_CT(500, 599),
+                 uint32_t S6 = CW_RAND_CT(600, 699),
+                 uint32_t S7 = CW_RAND_CT(700, 799)>
+        class flattened_flow {
+        public:
+            template<typename... Args>
+            CW_NOINLINE auto execute(Func func, Args&&... args) -> decltype(func(std::forward<Args>(args)...)) {
                 using ResultType = decltype(func(std::forward<Args>(args)...));
                 ResultType result{};
 
-                int iteration = 0;
-                while(state != state_end && iteration++ < 100) {
-                    // use runtime key for state comparison
-                    int decoded_state = state ^ state_xor_key;
+                // XOR-encoded state variable - decoded inside the switch
+                volatile uint32_t state = S0 ^ XK;
+                volatile uint32_t iter = 0;
+                CW_COMPILER_BARRIER();
 
-                    switch(decoded_state) {
-                        case 0xDEADBEEF: // will never match
-                            next_state = state_fake1 ^ state_xor_key;
+                while (iter < 64) {
+                    uint32_t decoded = static_cast<uint32_t>(state) ^ XK;
+                    CW_COMPILER_BARRIER();
+                    ++iter;
+
+                    switch (decoded) {
+                        case S0: {
+                            volatile int anchor = static_cast<int>(iter);
+                            CW_COMPILER_BARRIER();
+                            state = S1 ^ XK;
                             break;
-
-                        default:
-                            // decode state and route appropriately
-                            if (state == state_start) {
-                                next_state = opaque_true<>() ? state_exec : state_fake1;
-                                if (opaque_false<>()) next_state = state_fake2;
-                            } else if (state == state_exec) {
-                                result = func(std::forward<Args>(args)...);
-                                next_state = state_end;
-                                if (opaque_false<>()) next_state = state_fake1;
-                            } else if (state == state_fake1) {
-                                // actually execute fake path occasionally
-                                volatile int dummy = 42;
-                                CW_COMPILER_BARRIER();
-                                dummy = dummy * 2 + 1;
-                                next_state = state_exec;
-                            } else if (state == state_fake2) {
-                                // another fake path
-                                volatile float dummy2 = 3.14f;
-                                CW_COMPILER_BARRIER();
-                                dummy2 = dummy2 * 2.0f;
-                                next_state = state_start;
+                        }
+                        case S1: {
+                            if (opaque_true<>()) {
+                                state = S2 ^ XK;
                             } else {
-                                next_state = state_start;
+                                state = S5 ^ XK; // fake path
                             }
                             break;
+                        }
+                        case S2: {
+                            result = func(std::forward<Args>(args)...);
+                            state = S3 ^ XK;
+                            break;
+                        }
+                        case S3: {
+                            if (opaque_true<>()) {
+                                state = S4 ^ XK; // exit
+                            } else {
+                                state = S6 ^ XK; // fake path
+                            }
+                            break;
+                        }
+                        case S4: {
+                            iter = 64; // break the loop
+                            break;
+                        }
+                        case S5: {
+                            // fake computation block 1
+                            volatile int junk = 42;
+                            junk = (junk * 3 + 1) ^ static_cast<int>(iter);
+                            CW_COMPILER_BARRIER();
+                            state = S1 ^ XK;
+                            break;
+                        }
+                        case S6: {
+                            // fake computation block 2
+                            volatile float junk = 2.718f;
+                            junk = junk * 3.14f + static_cast<float>(iter);
+                            CW_COMPILER_BARRIER();
+                            state = S3 ^ XK;
+                            break;
+                        }
+                        case S7: {
+                            // fake loop block
+                            volatile int acc = 0;
+                            for (volatile int i = 0; i < 3; ++i) acc += i;
+                            CW_COMPILER_BARRIER();
+                            state = S0 ^ XK;
+                            break;
+                        }
+                        default: {
+                            // unknown state recovery
+                            state = S4 ^ XK;
+                            break;
+                        }
                     }
-
-                    state = next_state;
-
-                    // anti-debug check inline
-                    if ((iteration % 10) == 0) {
-                        CW_INLINE_CHECK();
-                    }
-
-                    for(int i = 0; i < CW_RAND_CT(1, 3); ++i) {
-                        CW_COMPILER_BARRIER();
-                    }
+                    CW_COMPILER_BARRIER();
                 }
 
                 return result;
             }
         };
 
-        // indirect branching via computed goto
         template<typename T>
         CW_FORCEINLINE T indirect_branch(T value) {
             T result = value;
@@ -3051,7 +3643,6 @@ namespace cloakwork {
         }
     }
 
-    // macros for control flow obfuscation
     #define CW_IF(cond) \
         if(cloakwork::control_flow::opaque_true<>() && (cond))
 
@@ -3060,6 +3651,564 @@ namespace cloakwork {
 
     #define CW_FLATTEN(func, ...) \
         cloakwork::control_flow::flattened_flow<decltype(func)>().execute(func, __VA_ARGS__)
+
+    //
+    // converts if/else/loop control flow into a dispatcher loop with
+    // encrypted state transitions, dead blocks, and opaque predicates.
+    // produces decompiler-hostile output that IDA/Hex-Rays shows as a
+    // complex state machine rather than the original structured code.
+    //
+    // usage:
+    //   int result = CW_FLAT_FUNC(int)
+    //       CW_FLAT_VARS(int x = 0; int y = 0;)
+    //       CW_FLAT_ENTRY(0)
+    //   CW_FLAT_BEGIN
+    //       CW_FLAT_BLOCK(0)
+    //           x = input * 2;
+    //           CW_FLAT_GOTO(1)
+    //       CW_FLAT_BLOCK(1)
+    //           CW_FLAT_IF(x > 50, 2, 3)
+    //       CW_FLAT_BLOCK(2)
+    //           CW_FLAT_RETURN(x)
+    //       CW_FLAT_BLOCK(3)
+    //           x += 10;
+    //           CW_FLAT_GOTO(1)
+    //   CW_FLAT_END;
+    //
+    // every block MUST end with a transition: GOTO, IF, RETURN, or EXIT.
+    // block IDs are arbitrary unsigned integers (0-65535 recommended).
+
+    namespace cfg_flatten {
+
+        // compile-time state derivation - maps block IDs to pseudo-random
+        // case values using a keyed splitmix32-like hash.
+        // produces well-distributed values with no collisions for typical inputs.
+        static constexpr uint32_t derive_state(uint32_t block_id, uint32_t seed) {
+            uint32_t h = block_id + seed;
+            h ^= h >> 16;
+            h *= 0x45D9F3Bu;
+            h ^= h >> 16;
+            h *= 0x119DE1F3u;
+            h ^= h >> 13;
+            return (h | 1u); // ensure non-zero and odd (sparse jump table)
+        }
+
+        // dead state derivation - different multiplier to avoid overlap with user states
+        static constexpr uint32_t derive_dead(uint32_t index, uint32_t seed) {
+            uint32_t h = (index + 0xDEAD0000u) ^ seed;
+            h ^= h >> 15;
+            h *= 0x2C1B3C6Du;
+            h ^= h >> 15;
+            h *= 0x297A2D39u;
+            h ^= h >> 13;
+            return (h | 1u);
+        }
+
+        // noinline dispatch wrapper - prevents LTCG/WPO from seeing through
+        // the flattened code and reconstructing the original CFG
+        template<typename F>
+        CW_NOINLINE auto execute(F&& f) -> decltype(f()) {
+            CW_COMPILER_BARRIER();
+            auto result = f();
+            CW_COMPILER_BARRIER();
+            return result;
+        }
+
+        template<typename F>
+        CW_NOINLINE void execute_void(F&& f) {
+            CW_COMPILER_BARRIER();
+            f();
+            CW_COMPILER_BARRIER();
+        }
+    }
+
+    // derive obfuscated case value from block ID using per-region seed
+    #define _CW_FLAT_STATE(id) \
+        (cloakwork::cfg_flatten::derive_state(static_cast<uint32_t>(id), _cw_flat_seed))
+
+    // derive dead block case value
+    #define _CW_FLAT_DEAD(n) \
+        (cloakwork::cfg_flatten::derive_dead(static_cast<uint32_t>(n), _cw_flat_seed))
+
+    // begin a flattened function returning ret_type.
+    // use as: auto result = CW_FLAT_FUNC(int) ... CW_FLAT_END;
+    #define CW_FLAT_FUNC(ret_type) \
+        cloakwork::cfg_flatten::execute([&]() -> ret_type { \
+            constexpr uint32_t _cw_flat_seed = \
+                static_cast<uint32_t>(__LINE__) * 0x45D9F3Bu + \
+                static_cast<uint32_t>(__COUNTER__) * 0x9E3779B9u; \
+            ret_type _cw_flat_res{}; \
+            volatile bool _cw_flat_run = true; \
+            volatile uint32_t _cw_flat_it = 0; \
+            volatile uint32_t _cw_flat_st;
+
+    // begin a void flattened function.
+    // use as: CW_FLAT_VOID ... CW_FLAT_VOID_END;
+    #define CW_FLAT_VOID \
+        cloakwork::cfg_flatten::execute_void([&]() { \
+            constexpr uint32_t _cw_flat_seed = \
+                static_cast<uint32_t>(__LINE__) * 0x45D9F3Bu + \
+                static_cast<uint32_t>(__COUNTER__) * 0x9E3779B9u; \
+            volatile bool _cw_flat_run = true; \
+            volatile uint32_t _cw_flat_it = 0; \
+            volatile uint32_t _cw_flat_st;
+
+    // declare shared variables accessible across all blocks.
+    // must appear between CW_FLAT_FUNC/CW_FLAT_VOID and CW_FLAT_ENTRY.
+    #define CW_FLAT_VARS(...) __VA_ARGS__
+
+    // set the entry block ID. must appear before CW_FLAT_BEGIN.
+    #define CW_FLAT_ENTRY(id) \
+        _cw_flat_st = _CW_FLAT_STATE(id);
+
+    // begin the dispatch loop. inserts dead blocks automatically.
+    // dead blocks form an unreachable cycle that inflates the CFG
+    // and confuses path enumeration in decompilers.
+    #define CW_FLAT_BEGIN \
+        CW_COMPILER_BARRIER(); \
+        while (_cw_flat_run && _cw_flat_it < 16384u) { \
+            uint32_t _cw_flat_d = static_cast<uint32_t>(_cw_flat_st); \
+            ++_cw_flat_it; \
+            CW_COMPILER_BARRIER(); \
+            switch (_cw_flat_d) { \
+                /* dead block 0: hash-like computation */ \
+                case _CW_FLAT_DEAD(0): { \
+                    volatile uint32_t _dh = 0x811C9DC5u; \
+                    _dh ^= static_cast<uint32_t>(_cw_flat_it); \
+                    _dh *= 0x01000193u; \
+                    _dh ^= _dh >> 16; \
+                    _cw_flat_st = _CW_FLAT_DEAD(1); \
+                    break; \
+                } \
+                /* dead block 1: accumulator loop */ \
+                case _CW_FLAT_DEAD(1): { \
+                    volatile int _da = 0; \
+                    for (volatile int _di = 0; _di < 3; ++_di) \
+                        _da = _da * 31 + _di; \
+                    _cw_flat_st = _CW_FLAT_DEAD(2); \
+                    break; \
+                } \
+                /* dead block 2: xorshift junk */ \
+                case _CW_FLAT_DEAD(2): { \
+                    volatile uint32_t _dx = _cw_flat_it; \
+                    _dx ^= _dx << 13; \
+                    _dx ^= _dx >> 17; \
+                    _dx ^= _dx << 5; \
+                    _cw_flat_st = _CW_FLAT_DEAD(3); \
+                    break; \
+                } \
+                /* dead block 3: conditional cycle back */ \
+                case _CW_FLAT_DEAD(3): { \
+                    volatile int _dc = static_cast<int>(_cw_flat_it) & 0xFF; \
+                    if (_dc > 128) { _cw_flat_st = _CW_FLAT_DEAD(4); } \
+                    else { _cw_flat_st = _CW_FLAT_DEAD(0); } \
+                    break; \
+                } \
+                /* dead block 4: stack entropy */ \
+                case _CW_FLAT_DEAD(4): { \
+                    volatile int _ds; \
+                    volatile uintptr_t _dp = reinterpret_cast<uintptr_t>(&_ds); \
+                    _ds = static_cast<int>(_dp & 0xFFu); \
+                    _cw_flat_st = _CW_FLAT_DEAD(5); \
+                    break; \
+                } \
+                /* dead block 5: multiply-accumulate */ \
+                case _CW_FLAT_DEAD(5): { \
+                    volatile uint32_t _dm = _cw_flat_it * 0x45D9F3Bu; \
+                    _dm ^= _dm >> 16; \
+                    _dm += 0x119DE1F3u; \
+                    _cw_flat_st = _CW_FLAT_DEAD(0); \
+                    break; \
+                } \
+                /* sentinel - closed by first CW_FLAT_BLOCK */ \
+                case _CW_FLAT_DEAD(0xFF): {
+
+    // start a user block with the given ID.
+    // every block must end with GOTO, IF, RETURN, or EXIT.
+    #define CW_FLAT_BLOCK(id) \
+                break; \
+                } \
+                case _CW_FLAT_STATE(id): {
+
+    // unconditional transition to target block
+    #define CW_FLAT_GOTO(id) \
+                    CW_COMPILER_BARRIER(); \
+                    _cw_flat_st = _CW_FLAT_STATE(id); \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    // obfuscated transition - adds fake dead-block branch via opaque predicate.
+    // use this for critical transitions to maximize IDA confusion.
+    #define CW_FLAT_GOTO_OBF(id) \
+                    CW_COMPILER_BARRIER(); \
+                    if (cloakwork::control_flow::opaque_true<>()) { \
+                        _cw_flat_st = _CW_FLAT_STATE(id); \
+                    } else { \
+                        _cw_flat_st = _CW_FLAT_DEAD(0); \
+                    } \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    // conditional transition - dispatches to true_id or false_id based on condition
+    #define CW_FLAT_IF(cond, true_id, false_id) \
+                    CW_COMPILER_BARRIER(); \
+                    _cw_flat_st = (cond) \
+                        ? static_cast<uint32_t>(_CW_FLAT_STATE(true_id)) \
+                        : static_cast<uint32_t>(_CW_FLAT_STATE(false_id)); \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    // obfuscated conditional - routes through volatile to prevent branch folding
+    #define CW_FLAT_IF_OBF(cond, true_id, false_id) \
+                    CW_COMPILER_BARRIER(); \
+                    { \
+                        volatile bool _cw_cond = (cond); \
+                        CW_COMPILER_BARRIER(); \
+                        if (_cw_cond) { \
+                            if (cloakwork::control_flow::opaque_true<>()) \
+                                _cw_flat_st = _CW_FLAT_STATE(true_id); \
+                            else \
+                                _cw_flat_st = _CW_FLAT_DEAD(0); \
+                        } else { \
+                            if (cloakwork::control_flow::opaque_true<>()) \
+                                _cw_flat_st = _CW_FLAT_STATE(false_id); \
+                            else \
+                                _cw_flat_st = _CW_FLAT_DEAD(1); \
+                        } \
+                    } \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    // return a value and exit the flattened function
+    #define CW_FLAT_RETURN(val) \
+                    CW_COMPILER_BARRIER(); \
+                    _cw_flat_res = (val); \
+                    _cw_flat_run = false; \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    // exit without returning a value (for void functions or default-return)
+    #define CW_FLAT_EXIT() \
+                    CW_COMPILER_BARRIER(); \
+                    _cw_flat_run = false; \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    // multi-way branch - flattened switch replacement.
+    // evaluates expr once, transitions to the matching block.
+    // pairs is a sequence of (value, block_id) checks with a default.
+    // usage: CW_FLAT_SWITCH(x, 0,blk_a, 1,blk_b, 2,blk_c, default_blk)
+    // (last argument is the default block)
+    #define CW_FLAT_SWITCH2(expr, v0,b0, v1,b1, def_blk) \
+                    CW_COMPILER_BARRIER(); \
+                    { \
+                        auto _cw_sw = (expr); \
+                        if (_cw_sw == (v0)) _cw_flat_st = _CW_FLAT_STATE(b0); \
+                        else if (_cw_sw == (v1)) _cw_flat_st = _CW_FLAT_STATE(b1); \
+                        else _cw_flat_st = _CW_FLAT_STATE(def_blk); \
+                    } \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    #define CW_FLAT_SWITCH3(expr, v0,b0, v1,b1, v2,b2, def_blk) \
+                    CW_COMPILER_BARRIER(); \
+                    { \
+                        auto _cw_sw = (expr); \
+                        if (_cw_sw == (v0)) _cw_flat_st = _CW_FLAT_STATE(b0); \
+                        else if (_cw_sw == (v1)) _cw_flat_st = _CW_FLAT_STATE(b1); \
+                        else if (_cw_sw == (v2)) _cw_flat_st = _CW_FLAT_STATE(b2); \
+                        else _cw_flat_st = _CW_FLAT_STATE(def_blk); \
+                    } \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    #define CW_FLAT_SWITCH4(expr, v0,b0, v1,b1, v2,b2, v3,b3, def_blk) \
+                    CW_COMPILER_BARRIER(); \
+                    { \
+                        auto _cw_sw = (expr); \
+                        if (_cw_sw == (v0)) _cw_flat_st = _CW_FLAT_STATE(b0); \
+                        else if (_cw_sw == (v1)) _cw_flat_st = _CW_FLAT_STATE(b1); \
+                        else if (_cw_sw == (v2)) _cw_flat_st = _CW_FLAT_STATE(b2); \
+                        else if (_cw_sw == (v3)) _cw_flat_st = _CW_FLAT_STATE(b3); \
+                        else _cw_flat_st = _CW_FLAT_STATE(def_blk); \
+                    } \
+                    CW_COMPILER_BARRIER(); \
+                    break;
+
+    // close the dispatch loop and return. use after last CW_FLAT_BLOCK.
+    #define CW_FLAT_END \
+                break; \
+                } \
+                default: { \
+                    _cw_flat_run = false; \
+                    break; \
+                } \
+            } \
+            CW_COMPILER_BARRIER(); \
+        } \
+        return _cw_flat_res; \
+    })
+
+    // close a void flattened function
+    #define CW_FLAT_VOID_END \
+                break; \
+                } \
+                default: { \
+                    _cw_flat_run = false; \
+                    break; \
+                } \
+            } \
+            CW_COMPILER_BARRIER(); \
+        } \
+    })
+
+    //
+    // wraps arbitrary code in an encrypted state machine dispatcher.
+    // the user's code becomes one state among dead blocks and opaque
+    // predicates. produces the same decompiler-hostile output as the
+    // manual CW_FLAT_* API but without requiring manual block decomposition.
+    //
+    // usage:
+    //   int result = CW_PROTECT(int, {
+    //       if (x > 10) return x * 2;
+    //       return x + 5;
+    //   });
+    //
+    //   CW_PROTECT_VOID({
+    //       do_something();
+    //   });
+    //
+    // the code block is executed inside a lambda ([&] capture), so:
+    //   - `return` exits the block, not the enclosing function
+    //   - all local variables from the enclosing scope are accessible
+    //   - ret_type must not contain unparenthesized commas
+    //     (use a typedef for std::pair<int,int> etc.)
+    //
+    // for maximum protection with manual control flow decomposition,
+    // use the CW_FLAT_* API instead.
+
+    #define CW_PROTECT(ret_type, ...) \
+        cloakwork::cfg_flatten::execute([&]() -> ret_type { \
+            constexpr uint32_t _cw_flat_seed = \
+                static_cast<uint32_t>(__LINE__) * 0x45D9F3Bu + \
+                static_cast<uint32_t>(__COUNTER__) * 0x9E3779B9u; \
+            ret_type _cw_flat_res{}; \
+            volatile bool _cw_flat_run = true; \
+            volatile uint32_t _cw_flat_it = 0; \
+            volatile uint32_t _cw_flat_st = _CW_FLAT_STATE(0); \
+            CW_COMPILER_BARRIER(); \
+            while (_cw_flat_run && _cw_flat_it < 16384u) { \
+                uint32_t _cw_flat_d = static_cast<uint32_t>(_cw_flat_st); \
+                ++_cw_flat_it; \
+                CW_COMPILER_BARRIER(); \
+                switch (_cw_flat_d) { \
+                    case _CW_FLAT_DEAD(0): { \
+                        volatile uint32_t _dh = 0x811C9DC5u; \
+                        _dh ^= static_cast<uint32_t>(_cw_flat_it); \
+                        _dh *= 0x01000193u; \
+                        _dh ^= _dh >> 16; \
+                        _cw_flat_st = _CW_FLAT_DEAD(1); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(1): { \
+                        volatile int _da = 0; \
+                        for (volatile int _di = 0; _di < 3; ++_di) \
+                            _da = _da * 31 + _di; \
+                        _cw_flat_st = _CW_FLAT_DEAD(2); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(2): { \
+                        volatile uint32_t _dx = _cw_flat_it; \
+                        _dx ^= _dx << 13; \
+                        _dx ^= _dx >> 17; \
+                        _dx ^= _dx << 5; \
+                        _cw_flat_st = _CW_FLAT_DEAD(3); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(3): { \
+                        volatile int _dc = static_cast<int>(_cw_flat_it) & 0xFF; \
+                        if (_dc > 128) { _cw_flat_st = _CW_FLAT_DEAD(4); } \
+                        else { _cw_flat_st = _CW_FLAT_DEAD(0); } \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(4): { \
+                        volatile int _ds; \
+                        volatile uintptr_t _dp = reinterpret_cast<uintptr_t>(&_ds); \
+                        _ds = static_cast<int>(_dp & 0xFFu); \
+                        _cw_flat_st = _CW_FLAT_DEAD(5); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(5): { \
+                        volatile uint32_t _dm = _cw_flat_it * 0x45D9F3Bu; \
+                        _dm ^= _dm >> 16; \
+                        _dm += 0x119DE1F3u; \
+                        _cw_flat_st = _CW_FLAT_DEAD(0); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(0): { \
+                        CW_COMPILER_BARRIER(); \
+                        volatile uint32_t _ep = _cw_flat_it; \
+                        _ep ^= _ep << 7; \
+                        if (cloakwork::control_flow::opaque_true<>()) { \
+                            _cw_flat_st = _CW_FLAT_STATE(1); \
+                        } else { \
+                            _cw_flat_st = _CW_FLAT_DEAD(0); \
+                        } \
+                        CW_COMPILER_BARRIER(); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(1): { \
+                        CW_COMPILER_BARRIER(); \
+                        volatile uint32_t _op = (_cw_flat_it | 2u); \
+                        if ((_op * (_op - 1u)) & 1u) { \
+                            _cw_flat_st = _CW_FLAT_DEAD(3); \
+                        } else { \
+                            _cw_flat_st = _CW_FLAT_STATE(2); \
+                        } \
+                        CW_COMPILER_BARRIER(); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(2): { \
+                        CW_COMPILER_BARRIER(); \
+                        _cw_flat_res = [&]() -> ret_type { __VA_ARGS__ }(); \
+                        CW_COMPILER_BARRIER(); \
+                        _cw_flat_st = _CW_FLAT_STATE(3); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(3): { \
+                        CW_COMPILER_BARRIER(); \
+                        if (cloakwork::control_flow::opaque_true<>()) { \
+                            _cw_flat_st = _CW_FLAT_STATE(4); \
+                        } else { \
+                            _cw_flat_st = _CW_FLAT_DEAD(5); \
+                        } \
+                        CW_COMPILER_BARRIER(); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(4): { \
+                        _cw_flat_run = false; \
+                        break; \
+                    } \
+                    default: { \
+                        _cw_flat_run = false; \
+                        break; \
+                    } \
+                } \
+                CW_COMPILER_BARRIER(); \
+            } \
+            return _cw_flat_res; \
+        })
+
+    #define CW_PROTECT_VOID(...) \
+        cloakwork::cfg_flatten::execute_void([&]() { \
+            constexpr uint32_t _cw_flat_seed = \
+                static_cast<uint32_t>(__LINE__) * 0x45D9F3Bu + \
+                static_cast<uint32_t>(__COUNTER__) * 0x9E3779B9u; \
+            volatile bool _cw_flat_run = true; \
+            volatile uint32_t _cw_flat_it = 0; \
+            volatile uint32_t _cw_flat_st = _CW_FLAT_STATE(0); \
+            CW_COMPILER_BARRIER(); \
+            while (_cw_flat_run && _cw_flat_it < 16384u) { \
+                uint32_t _cw_flat_d = static_cast<uint32_t>(_cw_flat_st); \
+                ++_cw_flat_it; \
+                CW_COMPILER_BARRIER(); \
+                switch (_cw_flat_d) { \
+                    case _CW_FLAT_DEAD(0): { \
+                        volatile uint32_t _dh = 0x811C9DC5u; \
+                        _dh ^= static_cast<uint32_t>(_cw_flat_it); \
+                        _dh *= 0x01000193u; \
+                        _dh ^= _dh >> 16; \
+                        _cw_flat_st = _CW_FLAT_DEAD(1); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(1): { \
+                        volatile int _da = 0; \
+                        for (volatile int _di = 0; _di < 3; ++_di) \
+                            _da = _da * 31 + _di; \
+                        _cw_flat_st = _CW_FLAT_DEAD(2); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(2): { \
+                        volatile uint32_t _dx = _cw_flat_it; \
+                        _dx ^= _dx << 13; \
+                        _dx ^= _dx >> 17; \
+                        _dx ^= _dx << 5; \
+                        _cw_flat_st = _CW_FLAT_DEAD(3); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(3): { \
+                        volatile int _dc = static_cast<int>(_cw_flat_it) & 0xFF; \
+                        if (_dc > 128) { _cw_flat_st = _CW_FLAT_DEAD(4); } \
+                        else { _cw_flat_st = _CW_FLAT_DEAD(0); } \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(4): { \
+                        volatile int _ds; \
+                        volatile uintptr_t _dp = reinterpret_cast<uintptr_t>(&_ds); \
+                        _ds = static_cast<int>(_dp & 0xFFu); \
+                        _cw_flat_st = _CW_FLAT_DEAD(5); \
+                        break; \
+                    } \
+                    case _CW_FLAT_DEAD(5): { \
+                        volatile uint32_t _dm = _cw_flat_it * 0x45D9F3Bu; \
+                        _dm ^= _dm >> 16; \
+                        _dm += 0x119DE1F3u; \
+                        _cw_flat_st = _CW_FLAT_DEAD(0); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(0): { \
+                        CW_COMPILER_BARRIER(); \
+                        volatile uint32_t _ep = _cw_flat_it; \
+                        _ep ^= _ep << 7; \
+                        if (cloakwork::control_flow::opaque_true<>()) { \
+                            _cw_flat_st = _CW_FLAT_STATE(1); \
+                        } else { \
+                            _cw_flat_st = _CW_FLAT_DEAD(0); \
+                        } \
+                        CW_COMPILER_BARRIER(); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(1): { \
+                        CW_COMPILER_BARRIER(); \
+                        volatile uint32_t _op = (_cw_flat_it | 2u); \
+                        if ((_op * (_op - 1u)) & 1u) { \
+                            _cw_flat_st = _CW_FLAT_DEAD(3); \
+                        } else { \
+                            _cw_flat_st = _CW_FLAT_STATE(2); \
+                        } \
+                        CW_COMPILER_BARRIER(); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(2): { \
+                        CW_COMPILER_BARRIER(); \
+                        [&]() { __VA_ARGS__ }(); \
+                        CW_COMPILER_BARRIER(); \
+                        _cw_flat_st = _CW_FLAT_STATE(3); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(3): { \
+                        CW_COMPILER_BARRIER(); \
+                        if (cloakwork::control_flow::opaque_true<>()) { \
+                            _cw_flat_st = _CW_FLAT_STATE(4); \
+                        } else { \
+                            _cw_flat_st = _CW_FLAT_DEAD(5); \
+                        } \
+                        CW_COMPILER_BARRIER(); \
+                        break; \
+                    } \
+                    case _CW_FLAT_STATE(4): { \
+                        _cw_flat_run = false; \
+                        break; \
+                    } \
+                    default: { \
+                        _cw_flat_run = false; \
+                        break; \
+                    } \
+                } \
+                CW_COMPILER_BARRIER(); \
+            } \
+        })
+
 #else
     namespace control_flow {
         template<int N = 0> inline bool opaque_true() { return true; }
@@ -3069,78 +4218,130 @@ namespace cloakwork {
     #define CW_IF(cond) if(cond)
     #define CW_ELSE else
     #define CW_FLATTEN(func, ...) func(__VA_ARGS__)
+
+    #define _CW_FLAT_STATE(id) static_cast<uint32_t>(id)
+    #define _CW_FLAT_DEAD(n) (0xFFFF0000u + static_cast<uint32_t>(n))
+
+    #define CW_FLAT_FUNC(ret_type) \
+        [&]() -> ret_type { \
+            ret_type _cw_flat_res{}; \
+            volatile bool _cw_flat_run = true; \
+            volatile uint32_t _cw_flat_it = 0; \
+            volatile uint32_t _cw_flat_st;
+
+    #define CW_FLAT_VOID \
+        [&]() { \
+            volatile bool _cw_flat_run = true; \
+            volatile uint32_t _cw_flat_it = 0; \
+            volatile uint32_t _cw_flat_st;
+
+    #define CW_FLAT_VARS(...) __VA_ARGS__
+    #define CW_FLAT_ENTRY(id) _cw_flat_st = _CW_FLAT_STATE(id);
+
+    #define CW_FLAT_BEGIN \
+        while (_cw_flat_run && _cw_flat_it++ < 16384u) { \
+            switch (static_cast<uint32_t>(_cw_flat_st)) { \
+                case _CW_FLAT_DEAD(0xFF): {
+
+    #define CW_FLAT_BLOCK(id) break; } case _CW_FLAT_STATE(id): {
+    #define CW_FLAT_GOTO(id) _cw_flat_st = _CW_FLAT_STATE(id); break;
+    #define CW_FLAT_GOTO_OBF(id) CW_FLAT_GOTO(id)
+    #define CW_FLAT_IF(cond, true_id, false_id) \
+        _cw_flat_st = (cond) ? _CW_FLAT_STATE(true_id) : _CW_FLAT_STATE(false_id); break;
+    #define CW_FLAT_IF_OBF(cond, true_id, false_id) CW_FLAT_IF(cond, true_id, false_id)
+    #define CW_FLAT_RETURN(val) _cw_flat_res = (val); _cw_flat_run = false; break;
+    #define CW_FLAT_EXIT() _cw_flat_run = false; break;
+    #define CW_FLAT_SWITCH2(expr, v0,b0, v1,b1, def) \
+        { auto _s=(expr); if(_s==(v0)) _cw_flat_st=_CW_FLAT_STATE(b0); \
+          else if(_s==(v1)) _cw_flat_st=_CW_FLAT_STATE(b1); \
+          else _cw_flat_st=_CW_FLAT_STATE(def); } break;
+    #define CW_FLAT_SWITCH3(expr, v0,b0, v1,b1, v2,b2, def) \
+        { auto _s=(expr); if(_s==(v0)) _cw_flat_st=_CW_FLAT_STATE(b0); \
+          else if(_s==(v1)) _cw_flat_st=_CW_FLAT_STATE(b1); \
+          else if(_s==(v2)) _cw_flat_st=_CW_FLAT_STATE(b2); \
+          else _cw_flat_st=_CW_FLAT_STATE(def); } break;
+    #define CW_FLAT_SWITCH4(expr, v0,b0, v1,b1, v2,b2, v3,b3, def) \
+        { auto _s=(expr); if(_s==(v0)) _cw_flat_st=_CW_FLAT_STATE(b0); \
+          else if(_s==(v1)) _cw_flat_st=_CW_FLAT_STATE(b1); \
+          else if(_s==(v2)) _cw_flat_st=_CW_FLAT_STATE(b2); \
+          else if(_s==(v3)) _cw_flat_st=_CW_FLAT_STATE(b3); \
+          else _cw_flat_st=_CW_FLAT_STATE(def); } break;
+
+    #define CW_FLAT_END \
+        break; } default: { _cw_flat_run = false; break; } \
+        } } return _cw_flat_res; }()
+
+    #define CW_FLAT_VOID_END \
+        break; } default: { _cw_flat_run = false; break; } \
+        } } }()
+
+    #define CW_PROTECT(ret_type, ...) \
+        [&]() -> ret_type { __VA_ARGS__ }()
+
+    #define CW_PROTECT_VOID(...) \
+        [&]() { __VA_ARGS__ }()
+
 #endif
 
-    // =================================================================
-    // function pointer obfuscation and indirection
-    // =================================================================
-
 #if CW_ENABLE_FUNCTION_OBFUSCATION
-    // obfuscation constants
-    constexpr uintptr_t PTR_OBFUSCATION_CONSTANT = 0xDEADBEEFCAFEBABE;
-    constexpr uintptr_t PTR_XOR_LAYER = 0xCAFEBABEDEADC0DE;
 
     template<typename Func>
     class obfuscated_call {
     private:
-        uintptr_t obfuscated_ptr;
-        uintptr_t xor_key;
+        // xtea-encrypted function pointer (reuses cipher from string_encrypt)
+        uint8_t encrypted_addr[sizeof(uintptr_t)];
+        string_encrypt::xtea::key128 ptr_key;
 
-        static constexpr size_t DECOY_COUNT = 10;
-        uintptr_t decoys[DECOY_COUNT];
+        // decoy array with randomized size and position
+        static constexpr size_t MAX_DECOYS = 16;
+        uintptr_t decoys[MAX_DECOYS];
+        size_t decoy_count;
+        size_t real_index;
 
-        CW_FORCEINLINE uintptr_t obfuscate_ptr(Func* ptr) {
-            uintptr_t addr = std::bit_cast<uintptr_t>(ptr);
-
-            // multi-stage obfuscation
-            addr = std::rotl(addr, 13);
-            addr ^= xor_key;
-            addr = std::rotr(addr, 7);
-            addr += PTR_OBFUSCATION_CONSTANT;
-
-            return addr;
+        CW_FORCEINLINE void encrypt_ptr(Func* ptr) {
+            uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
+            memcpy(encrypted_addr, &addr, sizeof(uintptr_t));
+            string_encrypt::xtea::encrypt_buffer(encrypted_addr, sizeof(uintptr_t), ptr_key);
         }
 
-        CW_FORCEINLINE Func* deobfuscate_ptr(uintptr_t obf) {
-            uintptr_t addr = obf;
-            addr -= PTR_OBFUSCATION_CONSTANT;
-            addr = std::rotl(addr, 7);
-            addr ^= xor_key;
-            addr = std::rotr(addr, 13);
-
-            return std::bit_cast<Func*>(addr);
+        CW_FORCEINLINE Func* decrypt_ptr() const {
+            uint8_t temp[sizeof(uintptr_t)];
+            memcpy(temp, encrypted_addr, sizeof(uintptr_t));
+            string_encrypt::xtea::decrypt_buffer(temp, sizeof(uintptr_t), ptr_key);
+            uintptr_t addr;
+            memcpy(&addr, temp, sizeof(uintptr_t));
+            return reinterpret_cast<Func*>(addr);
         }
 
     public:
-        obfuscated_call(Func* func)
-            : xor_key(CW_RANDOM_RT() | PTR_XOR_LAYER) {
+        obfuscated_call(Func* func) {
+            ptr_key.k[0] = static_cast<uint32_t>(CW_RANDOM_RT());
+            ptr_key.k[1] = static_cast<uint32_t>(CW_RANDOM_RT());
+            ptr_key.k[2] = static_cast<uint32_t>(CW_RANDOM_RT());
+            ptr_key.k[3] = static_cast<uint32_t>(CW_RANDOM_RT());
 
-            obfuscated_ptr = obfuscate_ptr(func);
+            encrypt_ptr(func);
 
-            // fill decoy array with garbage
-            for(size_t i = 0; i < DECOY_COUNT; ++i) {
-                decoys[i] = CW_RANDOM_RT() ^ xor_key;
+            decoy_count = 4 + (CW_RANDOM_RT() % (MAX_DECOYS - 4 + 1));
+            real_index = CW_RANDOM_RT() % decoy_count;
+
+            for (size_t i = 0; i < decoy_count; ++i) {
+                decoys[i] = CW_RANDOM_RT();
             }
-
-            // randomly place real pointer in decoy array
-            decoys[CW_RAND_RT(0, DECOY_COUNT-1)] = obfuscated_ptr;
+            uintptr_t addr;
+            memcpy(&addr, encrypted_addr, sizeof(uintptr_t));
+            decoys[real_index] = addr;
         }
 
         template<typename... Args>
         CW_FORCEINLINE auto operator()(Args&&... args) {
-            // periodic inline checks instead of every call (reduces overhead)
             static CW_ATOMIC(uint32_t) call_count{0};
             if ((++call_count % 100) == 0) {
                 CW_INLINE_CHECK();
             }
 
-            Func* real_func = deobfuscate_ptr(obfuscated_ptr);
-
-            auto call_wrapper = [&]() {
-                return real_func(std::forward<Args>(args)...);
-            };
-
-            return call_wrapper();
+            Func* real_func = decrypt_ptr();
+            return real_func(std::forward<Args>(args)...);
         }
     };
 #else
@@ -3157,14 +4358,9 @@ namespace cloakwork {
     };
 #endif
 
-    // =================================================================
-    // advanced data hiding techniques
-    // =================================================================
-
 #if CW_ENABLE_DATA_HIDING
     namespace data_hiding {
 
-        // actually scatter data across heap allocations (not just logical)
         template<typename T, size_t Chunks = 8>
         class scattered_value {
         private:
@@ -3180,6 +4376,7 @@ namespace cloakwork {
             };
 
             std::array<chunk_holder, Chunks> chunks;
+            mutable CW_MUTEX mutex;
 
             void scatter_data(const T& value) {
                 const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&value);
@@ -3210,6 +4407,7 @@ namespace cloakwork {
             }
 
             CW_FORCEINLINE T get() const {
+                CW_LOCK_GUARD(mutex);
                 T result;
                 uint8_t* result_bytes = reinterpret_cast<uint8_t*>(&result);
                 size_t byte_idx = 0;
@@ -3226,19 +4424,21 @@ namespace cloakwork {
             CW_FORCEINLINE operator T() const { return get(); }
 
             CW_FORCEINLINE void set(const T& value) {
+                CW_LOCK_GUARD(mutex);
                 scatter_data(value);
             }
         };
 
-        // polymorphic value that changes representation
         template<Arithmetic T>
         class polymorphic_value {
         private:
             mutable T value;
             mutable CW_ATOMIC(uint32_t) mutation_count{0};
+            mutable CW_MUTEX mutex;
 
             CW_FORCEINLINE void mutate() const {
                 if(++mutation_count % 100 == 0) {
+                    CW_LOCK_GUARD(mutex);
                     T temp = value;
 
                     uint32_t transform = CW_RANDOM_RT() % 4;
@@ -3334,58 +4534,152 @@ namespace cloakwork {
     }
 #endif
 
-    // =================================================================
-    // metamorphic code generation
-    // =================================================================
-
 #if CW_ENABLE_METAMORPHIC
     namespace metamorphic {
+
+#if defined(_WIN64) && !CW_KERNEL_MODE
+        // polymorphic thunk generator - allocates executable memory and generates
+        // randomized x64 instruction sequences that ultimately call the real function
+        namespace thunk_gen {
+            // random nop-equivalent instructions for x64
+            CW_FORCEINLINE size_t emit_junk_instruction(uint8_t* buf, uint64_t entropy) {
+                uint32_t choice = static_cast<uint32_t>(entropy % 8);
+                switch (choice) {
+                    case 0: buf[0] = 0x90; return 1;  // nop
+                    case 1: buf[0] = 0x66; buf[1] = 0x90; return 2;  // 66 nop
+                    case 2: buf[0] = 0x0F; buf[1] = 0x1F; buf[2] = 0x00; return 3;  // nop dword [rax]
+                    case 3: // lea rax, [rax+0]
+                        buf[0] = 0x48; buf[1] = 0x8D; buf[2] = 0x40; buf[3] = 0x00;
+                        return 4;
+                    case 4: // xchg reg, reg (same register = nop)
+                        buf[0] = 0x48; buf[1] = 0x87; buf[2] = 0xC0;  // xchg rax, rax
+                        return 3;
+                    case 5: // push rbx; pop rbx
+                        buf[0] = 0x53; buf[1] = 0x5B;
+                        return 2;
+                    case 6: // push rcx; pop rcx
+                        buf[0] = 0x51; buf[1] = 0x59;
+                        return 2;
+                    default: // test rax, rax (flags-only, doesn't change regs)
+                        buf[0] = 0x48; buf[1] = 0x85; buf[2] = 0xC0;
+                        return 3;
+                }
+            }
+
+            // generate a thunk that jumps to the real function with randomized padding
+            CW_FORCEINLINE uint8_t* generate_thunk(void* target) {
+                uint8_t* page = reinterpret_cast<uint8_t*>(
+                    VirtualAlloc(nullptr, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+                if (!page) return nullptr;
+
+                size_t offset = 0;
+
+                // emit 3-8 random junk instructions before the real jump
+                uint32_t junk_count = 3 + (static_cast<uint32_t>(CW_RANDOM_RT()) % 6);
+                for (uint32_t i = 0; i < junk_count && offset < 200; ++i) {
+                    offset += emit_junk_instruction(page + offset, CW_RANDOM_RT());
+                }
+
+                // mov rax, <target_address> (48 B8 XX XX XX XX XX XX XX XX)
+                page[offset++] = 0x48;
+                page[offset++] = 0xB8;
+                *reinterpret_cast<uint64_t*>(page + offset) = reinterpret_cast<uint64_t>(target);
+                offset += 8;
+
+                // emit 1-3 more junk instructions
+                uint32_t junk_count2 = 1 + (static_cast<uint32_t>(CW_RANDOM_RT()) % 3);
+                for (uint32_t i = 0; i < junk_count2 && offset < 250; ++i) {
+                    offset += emit_junk_instruction(page + offset, CW_RANDOM_RT());
+                }
+
+                // jmp rax (FF E0)
+                page[offset++] = 0xFF;
+                page[offset++] = 0xE0;
+
+                // fill rest with int3 for safety
+                for (size_t i = offset; i < 4096; ++i)
+                    page[i] = 0xCC;
+
+                return page;
+            }
+
+            CW_FORCEINLINE void free_thunk(uint8_t* thunk) {
+                if (thunk) VirtualFree(thunk, 0, MEM_RELEASE);
+            }
+        }
+#endif
 
         template<typename Func>
         class metamorphic_function {
         private:
-            static constexpr size_t MAX_MUTATIONS = 5;
+            Func* real_func;
+            mutable CW_ATOMIC(uint32_t) call_count{0};
 
-            struct mutation {
-                Func* func;
-                uint32_t key;
-            };
-
-            mutation mutations[MAX_MUTATIONS];
-            mutable CW_ATOMIC(size_t) current_mutation{0};
+#if defined(_WIN64) && !CW_KERNEL_MODE
+            static constexpr uint32_t REGEN_INTERVAL = 1000;
+            mutable uint8_t* thunk = nullptr;
+            mutable CW_MUTEX mutex;
+#endif
 
         public:
             metamorphic_function(std::initializer_list<Func*> funcs) {
-                size_t i = 0;
-                for(auto* func : funcs) {
-                    if(i < MAX_MUTATIONS) {
-                        mutations[i].func = func;
-                        mutations[i].key = CW_RANDOM_RT();
-                        ++i;
-                    }
-                }
+                real_func = *funcs.begin();
 
-                while(i < MAX_MUTATIONS) {
-                    mutations[i] = mutations[0];
-                    ++i;
-                }
+#if defined(_WIN64) && !CW_KERNEL_MODE
+                thunk = thunk_gen::generate_thunk(reinterpret_cast<void*>(real_func));
+#endif
+            }
+
+            metamorphic_function(Func* func) : real_func(func) {
+#if defined(_WIN64) && !CW_KERNEL_MODE
+                thunk = thunk_gen::generate_thunk(reinterpret_cast<void*>(real_func));
+#endif
+            }
+
+            ~metamorphic_function() {
+#if defined(_WIN64) && !CW_KERNEL_MODE
+                thunk_gen::free_thunk(thunk);
+#endif
+            }
+
+            metamorphic_function(const metamorphic_function&) = delete;
+            metamorphic_function& operator=(const metamorphic_function&) = delete;
+
+            metamorphic_function(metamorphic_function&& other) noexcept
+                : real_func(other.real_func), call_count(other.call_count.load()) {
+#if defined(_WIN64) && !CW_KERNEL_MODE
+                thunk = other.thunk;
+                other.thunk = nullptr;
+#endif
             }
 
             template<typename... Args>
             CW_FORCEINLINE auto operator()(Args&&... args) const {
-                size_t next = (current_mutation.load() + 1) % MAX_MUTATIONS;
+                uint32_t count = ++call_count;
 
-                if(CW_RANDOM_RT() % 100 < 20) {
-                    next = CW_RANDOM_RT() % MAX_MUTATIONS;
+#if defined(_WIN64) && !CW_KERNEL_MODE
+                // regenerate thunk every N calls - different machine code each time
+                if (thunk && (count % REGEN_INTERVAL) == 0) {
+                    CW_LOCK_GUARD(mutex);
+                    uint8_t* old_thunk = thunk;
+                    uint8_t* new_thunk = thunk_gen::generate_thunk(reinterpret_cast<void*>(real_func));
+                    if (new_thunk) {
+                        const_cast<uint8_t*&>(thunk) = new_thunk;
+                        thunk_gen::free_thunk(old_thunk);
+                    }
                 }
 
-                current_mutation.store(next);
-                return mutations[next].func(std::forward<Args>(args)...);
+                if (thunk) {
+                    auto thunk_fn = reinterpret_cast<Func*>(thunk);
+                    return thunk_fn(std::forward<Args>(args)...);
+                }
+#endif
+
+                return real_func(std::forward<Args>(args)...);
             }
         };
     }
 #else
-    // stub when metamorphic is disabled - just wraps a single function pointer
     namespace metamorphic {
         template<typename Func>
         class metamorphic_function {
@@ -3393,6 +4687,7 @@ namespace cloakwork {
             Func* func_ptr;
         public:
             metamorphic_function(Func* func) : func_ptr(func) {}
+            metamorphic_function(std::initializer_list<Func*> funcs) : func_ptr(*funcs.begin()) {}
             template<typename... Args>
             CW_FORCEINLINE auto operator()(Args&&... args) const {
                 return func_ptr(std::forward<Args>(args)...);
@@ -3401,21 +4696,133 @@ namespace cloakwork {
     }
 #endif
 
-    // =================================================================
-    // import hiding and dynamic API resolution
-    // =================================================================
-
 #if CW_ENABLE_IMPORT_HIDING
     namespace imports {
 
-        // get module base by hash
+        namespace detail {
+            // validate PE header structure with bounds checking
+            CW_FORCEINLINE bool validate_pe_header(void* module, IMAGE_NT_HEADERS** out_nt, uint32_t* out_image_size) {
+                auto dos = static_cast<IMAGE_DOS_HEADER*>(module);
+                if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+
+                // e_lfanew must be positive and within reasonable bounds
+                if (dos->e_lfanew <= 0 || dos->e_lfanew >= 0x1000) return false;
+
+                auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+                    reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
+
+#if CW_KERNEL_MODE
+                if (!MmIsAddressValid(nt)) return false;
+#endif
+                if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+
+                uint32_t image_size = nt->OptionalHeader.SizeOfImage;
+                if (image_size == 0 || image_size > 0x7FFFFFFF) return false;
+
+                *out_nt = nt;
+                *out_image_size = image_size;
+                return true;
+            }
+
+            // validate that an RVA falls within image bounds
+            CW_FORCEINLINE bool rva_in_bounds(uint32_t rva, uint32_t size, uint32_t image_size) {
+                uint64_t end = static_cast<uint64_t>(rva) + static_cast<uint64_t>(size);
+                return rva < image_size && end <= static_cast<uint64_t>(image_size);
+            }
+
+            // parse "DllName.FunctionName" forwarded export string and resolve recursively
+            CW_FORCEINLINE void* resolve_forwarded_export(const char* forward_str) {
+                // find the dot separator
+                const char* dot = forward_str;
+                while (*dot && *dot != '.') ++dot;
+                if (!*dot) return nullptr;
+
+                // build module name with ".dll" suffix
+                // forward_str is like "NTDLL.RtlInitUnicodeString"
+                char module_name[256];
+                size_t mod_len = static_cast<size_t>(dot - forward_str);
+                if (mod_len >= sizeof(module_name) - 5) return nullptr;
+
+                for (size_t i = 0; i < mod_len; ++i)
+                    module_name[i] = forward_str[i];
+                module_name[mod_len] = '.';
+                module_name[mod_len + 1] = 'd';
+                module_name[mod_len + 2] = 'l';
+                module_name[mod_len + 3] = 'l';
+                module_name[mod_len + 4] = '\0';
+
+                const char* func_name = dot + 1;
+
+                // resolve the forwarding target module and function
+                uint32_t mod_hash = hash::fnv1a_runtime_ci(module_name);
+                uint32_t func_hash = hash::fnv1a_runtime(func_name);
+
+                // avoid infinite recursion - we use the public functions declared below
+                // but since they're in the same namespace, forward declaration isn't needed
+                // we just call through the namespace
+                void* target_mod = nullptr;
+
+                // inline PEB walk to avoid circular dependency with getModuleBase
+#if defined(_WIN32) && !CW_KERNEL_MODE
+#ifdef _WIN64
+                auto peb = reinterpret_cast<PEB*>(__readgsqword(0x60));
+#else
+                auto peb = reinterpret_cast<PEB*>(__readfsdword(0x30));
+#endif
+                if (!peb || !peb->Ldr) return nullptr;
+
+                auto ldr = peb->Ldr;
+                auto head = &ldr->InMemoryOrderModuleList;
+                for (auto curr = head->Flink; curr != head; curr = curr->Flink) {
+                    auto entry = CONTAINING_RECORD(curr, cloakwork_internal::CW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+                    if (!entry->BaseDllName.Buffer || entry->BaseDllName.Length == 0) continue;
+                    if (hash::fnv1a_runtime_ci_w2a(entry->BaseDllName.Buffer) == mod_hash) {
+                        target_mod = entry->DllBase;
+                        break;
+                    }
+                }
+#endif
+                if (!target_mod) return nullptr;
+
+                // now resolve the function in the target module (non-recursive getProcAddress inline)
+                IMAGE_NT_HEADERS* nt = nullptr;
+                uint32_t image_size = 0;
+                if (!validate_pe_header(target_mod, &nt, &image_size)) return nullptr;
+
+                auto& exp_dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+                if (exp_dir.VirtualAddress == 0) return nullptr;
+                if (!rva_in_bounds(exp_dir.VirtualAddress, exp_dir.Size, image_size)) return nullptr;
+
+                auto exports = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(
+                    reinterpret_cast<uint8_t*>(target_mod) + exp_dir.VirtualAddress);
+
+                if (!rva_in_bounds(exports->AddressOfNames, exports->NumberOfNames * 4, image_size)) return nullptr;
+                if (!rva_in_bounds(exports->AddressOfNameOrdinals, exports->NumberOfNames * 2, image_size)) return nullptr;
+                if (!rva_in_bounds(exports->AddressOfFunctions, exports->NumberOfFunctions * 4, image_size)) return nullptr;
+
+                auto names = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(target_mod) + exports->AddressOfNames);
+                auto ordinals = reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(target_mod) + exports->AddressOfNameOrdinals);
+                auto functions = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(target_mod) + exports->AddressOfFunctions);
+
+                for (uint32_t i = 0; i < exports->NumberOfNames; ++i) {
+                    if (!rva_in_bounds(names[i], 1, image_size)) continue;
+                    auto name = reinterpret_cast<const char*>(reinterpret_cast<uint8_t*>(target_mod) + names[i]);
+                    if (hash::fnv1a_runtime(name) == func_hash) {
+                        uint16_t ordinal = ordinals[i];
+                        if (ordinal >= exports->NumberOfFunctions) return nullptr;
+                        uint32_t func_rva = functions[ordinal];
+                        // don't follow another forward - one level is enough
+                        return reinterpret_cast<uint8_t*>(target_mod) + func_rva;
+                    }
+                }
+
+                return nullptr;
+            }
+        }
+
         CW_FORCEINLINE void* getModuleBase(uint32_t moduleHash) {
 #if CW_KERNEL_MODE
-            // kernel mode: walk the driver section list via DRIVER_OBJECT
-            // we use PsLoadedModuleList which is the kernel's loaded module list
-
-            // first, try to find ntoskrnl.exe base using a known export
-            // this is a common kernel technique
+            // kernel mode: first try ntoskrnl via RtlPcToFileHeader
             typedef PVOID (*RtlPcToFileHeaderFn)(PVOID PcValue, PVOID* BaseOfImage);
             static RtlPcToFileHeaderFn RtlPcToFileHeader = nullptr;
             static bool rtl_resolved = false;
@@ -3428,20 +4835,15 @@ namespace cloakwork {
                 rtl_resolved = true;
             }
 
-            // get ntoskrnl base first if that's what we're looking for
+            // check if we're looking for ntoskrnl
             if (RtlPcToFileHeader) {
                 PVOID ntoskrnl_base = nullptr;
                 RtlPcToFileHeader(reinterpret_cast<PVOID>(RtlPcToFileHeader), &ntoskrnl_base);
 
-                // check if this is the module we want
                 if (ntoskrnl_base) {
-                    auto dos = static_cast<IMAGE_DOS_HEADER*>(ntoskrnl_base);
-                    if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
-                        auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-                            reinterpret_cast<uint8_t*>(ntoskrnl_base) + dos->e_lfanew);
-
-                        // we found ntoskrnl, check if that's the hash we want
-                        // common names to check
+                    IMAGE_NT_HEADERS* nt = nullptr;
+                    uint32_t image_size = 0;
+                    if (detail::validate_pe_header(ntoskrnl_base, &nt, &image_size)) {
                         uint32_t ntoskrnl_hashes[] = {
                             hash::fnv1a_ci("ntoskrnl.exe", 12),
                             hash::fnv1a_ci("ntkrnlpa.exe", 12),
@@ -3455,14 +4857,42 @@ namespace cloakwork {
                 }
             }
 
-            // for other modules, use MmGetSystemRoutineAddress approach
-            // by searching for known exports that only exist in specific modules
-            // this is limited but works for common cases (ntoskrnl exports)
+            // walk PsLoadedModuleList for arbitrary driver lookup
+            // PsLoadedModuleList is an undocumented but well-known exported symbol
+            typedef PLIST_ENTRY PsLoadedModuleListPtr;
+            static PsLoadedModuleListPtr PsLoadedModuleList = nullptr;
+            static bool pslml_resolved = false;
+
+            if (!pslml_resolved) {
+                UNICODE_STRING name;
+                RtlInitUnicodeString(&name, L"PsLoadedModuleList");
+                PsLoadedModuleList = reinterpret_cast<PsLoadedModuleListPtr>(
+                    MmGetSystemRoutineAddress(&name));
+                pslml_resolved = true;
+            }
+
+            if (PsLoadedModuleList && MmIsAddressValid(PsLoadedModuleList)) {
+                auto head = PsLoadedModuleList;
+                for (auto curr = head->Flink; curr != head; curr = curr->Flink) {
+                    if (!MmIsAddressValid(curr)) break;
+
+                    auto entry = CONTAINING_RECORD(curr,
+                        cloakwork_internal::KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+
+                    if (!MmIsAddressValid(entry)) continue;
+                    if (!entry->BaseDllName.Buffer || entry->BaseDllName.Length == 0) continue;
+                    if (!MmIsAddressValid(entry->BaseDllName.Buffer)) continue;
+
+                    uint32_t modHash = hash::fnv1a_runtime_ci_w2a(entry->BaseDllName.Buffer);
+                    if (modHash == moduleHash) {
+                        return entry->DllBase;
+                    }
+                }
+            }
 
             return nullptr;
 
 #elif defined(_WIN32)
-            // user mode: walk PEB module list
             __try {
 #ifdef _WIN64
                 auto peb = reinterpret_cast<PEB*>(__readgsqword(0x60));
@@ -3475,11 +4905,9 @@ namespace cloakwork {
                 auto head = &ldr->InMemoryOrderModuleList;
 
                 for (auto curr = head->Flink; curr != head; curr = curr->Flink) {
-                    // use our full structure definition
                     auto entry = CONTAINING_RECORD(curr, cloakwork_internal::CW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
-                    if (!entry->BaseDllName.Buffer) continue;
+                    if (!entry->BaseDllName.Buffer || entry->BaseDllName.Length == 0) continue;
 
-                    // use wide-to-ascii hash to match CW_HASH_CI (ascii) against wide string from PEB
                     uint32_t modHash = hash::fnv1a_runtime_ci_w2a(entry->BaseDllName.Buffer);
                     if (modHash == moduleHash) {
                         return entry->DllBase;
@@ -3493,108 +4921,95 @@ namespace cloakwork {
             return nullptr;
         }
 
-        // get function address by walking export table
-        CW_FORCEINLINE void* getProcAddress(void* module, uint32_t funcHash) {
+        CW_FORCEINLINE void* walkExportTable(void* module, uint32_t funcHash) {
+            IMAGE_NT_HEADERS* nt = nullptr;
+            uint32_t image_size = 0;
+            if (!detail::validate_pe_header(module, &nt, &image_size)) return nullptr;
+
+            auto& export_entry = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+            if (export_entry.VirtualAddress == 0 || export_entry.Size == 0) return nullptr;
+
+            // validate export directory RVA + size within image bounds
+            if (!detail::rva_in_bounds(export_entry.VirtualAddress, export_entry.Size, image_size))
+                return nullptr;
+
+            auto base = reinterpret_cast<uint8_t*>(module);
+            auto exports = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(base + export_entry.VirtualAddress);
+
 #if CW_KERNEL_MODE
-            // kernel mode: walk export table (same as user mode but no SEH)
-            if (!module) return nullptr;
-            if (!MmIsAddressValid(module)) return nullptr;
-
-            auto dos = static_cast<IMAGE_DOS_HEADER*>(module);
-            if (dos->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
-
-            auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-                reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
-            if (!MmIsAddressValid(nt)) return nullptr;
-            if (nt->Signature != IMAGE_NT_SIGNATURE) return nullptr;
-
-            auto exportDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-            if (exportDir.VirtualAddress == 0) return nullptr;
-
-            auto exports = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(
-                reinterpret_cast<uint8_t*>(module) + exportDir.VirtualAddress);
             if (!MmIsAddressValid(exports)) return nullptr;
+#endif
 
-            auto names = reinterpret_cast<uint32_t*>(
-                reinterpret_cast<uint8_t*>(module) + exports->AddressOfNames);
-            auto ordinals = reinterpret_cast<uint16_t*>(
-                reinterpret_cast<uint8_t*>(module) + exports->AddressOfNameOrdinals);
-            auto functions = reinterpret_cast<uint32_t*>(
-                reinterpret_cast<uint8_t*>(module) + exports->AddressOfFunctions);
+            // validate all three table RVAs
+            if (!detail::rva_in_bounds(exports->AddressOfNames,
+                exports->NumberOfNames * sizeof(uint32_t), image_size))
+                return nullptr;
+            if (!detail::rva_in_bounds(exports->AddressOfNameOrdinals,
+                exports->NumberOfNames * sizeof(uint16_t), image_size))
+                return nullptr;
+            if (!detail::rva_in_bounds(exports->AddressOfFunctions,
+                exports->NumberOfFunctions * sizeof(uint32_t), image_size))
+                return nullptr;
+
+            auto names = reinterpret_cast<uint32_t*>(base + exports->AddressOfNames);
+            auto ordinals = reinterpret_cast<uint16_t*>(base + exports->AddressOfNameOrdinals);
+            auto functions = reinterpret_cast<uint32_t*>(base + exports->AddressOfFunctions);
 
             for (uint32_t i = 0; i < exports->NumberOfNames; ++i) {
-                auto name = reinterpret_cast<const char*>(
-                    reinterpret_cast<uint8_t*>(module) + names[i]);
+                if (!detail::rva_in_bounds(names[i], 1, image_size)) continue;
 
+                auto name = reinterpret_cast<const char*>(base + names[i]);
+#if CW_KERNEL_MODE
                 if (!MmIsAddressValid(const_cast<char*>(name))) continue;
+#endif
 
                 if (hash::fnv1a_runtime(name) == funcHash) {
-                    uint32_t funcRva = functions[ordinals[i]];
+                    // bounds-check ordinal before using as index into functions array
+                    uint16_t ordinal = ordinals[i];
+                    if (ordinal >= exports->NumberOfFunctions) return nullptr;
 
-                    // check for forwarded export
-                    if (funcRva >= exportDir.VirtualAddress &&
-                        funcRva < exportDir.VirtualAddress + exportDir.Size) {
-                        // forwarded export - not handling for simplicity
+                    uint32_t func_rva = functions[ordinal];
+
+                    // check for forwarded export using 64-bit arithmetic to prevent overflow
+                    uint64_t export_start = static_cast<uint64_t>(export_entry.VirtualAddress);
+                    uint64_t export_end = export_start + static_cast<uint64_t>(export_entry.Size);
+
+                    if (static_cast<uint64_t>(func_rva) >= export_start &&
+                        static_cast<uint64_t>(func_rva) < export_end) {
+#if CW_KERNEL_MODE
+                        // kernel mode: don't follow forwarded exports
                         return nullptr;
+#else
+                        auto forward_str = reinterpret_cast<const char*>(base + func_rva);
+                        return detail::resolve_forwarded_export(forward_str);
+#endif
                     }
 
-                    return reinterpret_cast<uint8_t*>(module) + funcRva;
+                    return base + func_rva;
                 }
             }
 
             return nullptr;
+        }
 
-#elif defined(_WIN32)
-            // user mode: walk export table with SEH
+        CW_FORCEINLINE void* getProcAddress(void* module, uint32_t funcHash) {
             if (!module) return nullptr;
 
+#if CW_KERNEL_MODE
+            if (!MmIsAddressValid(module)) return nullptr;
+            return walkExportTable(module, funcHash);
+#elif defined(_WIN32)
             __try {
-                auto dos = static_cast<IMAGE_DOS_HEADER*>(module);
-                if (dos->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
-
-                auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-                    reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
-                if (nt->Signature != IMAGE_NT_SIGNATURE) return nullptr;
-
-                auto exportDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-                if (exportDir.VirtualAddress == 0) return nullptr;
-
-                auto exports = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(
-                    reinterpret_cast<uint8_t*>(module) + exportDir.VirtualAddress);
-
-                auto names = reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uint8_t*>(module) + exports->AddressOfNames);
-                auto ordinals = reinterpret_cast<uint16_t*>(
-                    reinterpret_cast<uint8_t*>(module) + exports->AddressOfNameOrdinals);
-                auto functions = reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uint8_t*>(module) + exports->AddressOfFunctions);
-
-                for (uint32_t i = 0; i < exports->NumberOfNames; ++i) {
-                    auto name = reinterpret_cast<const char*>(
-                        reinterpret_cast<uint8_t*>(module) + names[i]);
-
-                    if (hash::fnv1a_runtime(name) == funcHash) {
-                        uint32_t funcRva = functions[ordinals[i]];
-
-                        // check for forwarded export
-                        if (funcRva >= exportDir.VirtualAddress &&
-                            funcRva < exportDir.VirtualAddress + exportDir.Size) {
-                            // forwarded export - not handling for simplicity
-                            return nullptr;
-                        }
-
-                        return reinterpret_cast<uint8_t*>(module) + funcRva;
-                    }
-                }
+                return walkExportTable(module, funcHash);
             }
             __except (EXCEPTION_EXECUTE_HANDLER) {
                 return nullptr;
             }
-#endif
+#else
             return nullptr;
+#endif
         }
 
-        // cached import resolution
         template<uint32_t ModuleHash, uint32_t FuncHash>
         CW_FORCEINLINE void* getCachedImport() {
             static void* cached = nullptr;
@@ -3606,7 +5021,6 @@ namespace cloakwork {
         }
     }
 
-    // macro for hidden imports (uses case-insensitive hash for module names)
     #define CW_IMPORT(mod, func) \
         reinterpret_cast<decltype(&func)>( \
             cloakwork::imports::getCachedImport<CW_HASH_CI(mod), CW_HASH(#func)>())
@@ -3623,75 +5037,190 @@ namespace cloakwork {
     #define CW_IMPORT_WIDE(mod, func) (&func)
 #endif
 
-    // =================================================================
-    // direct syscalls
-    // =================================================================
-
 #if CW_ENABLE_SYSCALLS
     namespace syscall {
 
-        // get syscall number from ntdll function
+        static constexpr uint32_t SYSCALL_ERROR = UINT32_MAX;
+
+        // extract syscall number from ntdll stub with halo's gate fallback
         CW_FORCEINLINE uint32_t getSyscallNumber(uint32_t funcHash) {
-#ifdef _WIN32
+#if defined(_WIN32) && !CW_KERNEL_MODE
             __try {
                 void* ntdll = imports::getModuleBase(CW_HASH_CI("ntdll.dll"));
-                if (!ntdll) return 0;
+                if (!ntdll) return SYSCALL_ERROR;
 
                 auto func = reinterpret_cast<uint8_t*>(imports::getProcAddress(ntdll, funcHash));
-                if (!func) return 0;
+                if (!func) return SYSCALL_ERROR;
 
-                // pattern: mov r10, rcx; mov eax, <syscall_number>
-                // 4C 8B D1 B8 XX XX XX XX
+                // standard pattern: mov r10, rcx; mov eax, <number>
+                // bytes: 4C 8B D1 B8 XX XX XX XX
                 if (func[0] == 0x4C && func[1] == 0x8B && func[2] == 0xD1 && func[3] == 0xB8) {
-                    return *reinterpret_cast<uint32_t*>(func + 4);
+                    uint32_t number = *reinterpret_cast<uint32_t*>(func + 4);
+                    if (number < 0x2000) return number;
                 }
 
-                // alternative pattern for older windows
-                // B8 XX XX XX XX
+                // halo's gate: stub is hooked (starts with jmp), scan neighboring stubs
+                // ntdll syscall stubs are laid out sequentially, ~32 bytes apart
+                // if our target is hooked, find a clean neighbor and calculate by offset
+                bool is_hooked = (func[0] == 0xE9) ||  // jmp rel32
+                                 (func[0] == 0xFF && func[1] == 0x25) ||  // jmp [rip+disp32]
+                                 (func[0] == 0x68 && func[5] == 0xC3);   // push addr; ret
+
+                if (is_hooked) {
+                    // scan up and down for clean stubs
+                    for (int offset = 1; offset < 500; ++offset) {
+                        // try stub above (lower address = lower syscall number)
+                        uint8_t* up = func - (offset * 32);
+                        if (up[0] == 0x4C && up[1] == 0x8B && up[2] == 0xD1 && up[3] == 0xB8) {
+                            uint32_t neighbor_num = *reinterpret_cast<uint32_t*>(up + 4);
+                            uint32_t number = neighbor_num + static_cast<uint32_t>(offset);
+                            if (number < 0x2000) return number;
+                        }
+
+                        // try stub below (higher address = higher syscall number)
+                        uint8_t* down = func + (offset * 32);
+                        if (down[0] == 0x4C && down[1] == 0x8B && down[2] == 0xD1 && down[3] == 0xB8) {
+                            uint32_t neighbor_num = *reinterpret_cast<uint32_t*>(down + 4);
+                            if (neighbor_num >= static_cast<uint32_t>(offset)) {
+                                uint32_t number = neighbor_num - static_cast<uint32_t>(offset);
+                                if (number < 0x2000) return number;
+                            }
+                        }
+                    }
+                }
+
+                // legacy pattern: mov eax, <number> (older windows, wow64)
                 if (func[0] == 0xB8) {
-                    return *reinterpret_cast<uint32_t*>(func + 1);
+                    uint32_t number = *reinterpret_cast<uint32_t*>(func + 1);
+                    if (number < 0x2000) return number;
                 }
             }
             __except (EXCEPTION_EXECUTE_HANDLER) {
-                return 0;
+                return SYSCALL_ERROR;
             }
 #endif
-            return 0;
+            return SYSCALL_ERROR;
         }
 
-        // cached syscall number
         template<uint32_t FuncHash>
         CW_FORCEINLINE uint32_t getCachedSyscallNumber() {
-            static uint32_t cached = 0;
-            if (cached == 0) {
+            static uint32_t cached = SYSCALL_ERROR;
+            if (cached == SYSCALL_ERROR) {
                 cached = getSyscallNumber(FuncHash);
             }
             return cached;
         }
 
-#ifdef _WIN64
-        // x64 syscall invoker - uses inline assembly via intrinsic workaround
-        // note: actual syscall invocation requires asm. this provides the infrastructure.
-        extern "C" NTSTATUS __syscall_stub(uint32_t syscallNumber, ...);
+#if defined(_WIN64) && !CW_KERNEL_MODE
+        // find a "syscall; ret" gadget (0F 05 C3) in ntdll .text section
+        CW_FORCEINLINE void* findSyscallGadget() {
+            __try {
+                void* ntdll = imports::getModuleBase(CW_HASH_CI("ntdll.dll"));
+                if (!ntdll) return nullptr;
+
+                IMAGE_NT_HEADERS* nt = nullptr;
+                uint32_t image_size = 0;
+                if (!imports::detail::validate_pe_header(ntdll, &nt, &image_size)) return nullptr;
+
+                auto base = reinterpret_cast<uint8_t*>(ntdll);
+
+                auto section = IMAGE_FIRST_SECTION(nt);
+                for (uint16_t i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
+                    if (!(section->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+
+                    uint32_t sec_start = section->VirtualAddress;
+                    uint32_t sec_size = section->Misc.VirtualSize;
+                    if (!imports::detail::rva_in_bounds(sec_start, sec_size, image_size)) continue;
+
+                    // scan for syscall; ret (0F 05 C3)
+                    for (uint32_t j = 0; j + 2 < sec_size; ++j) {
+                        uint8_t* p = base + sec_start + j;
+                        if (p[0] == 0x0F && p[1] == 0x05 && p[2] == 0xC3) {
+                            return p;
+                        }
+                    }
+                }
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {
+                return nullptr;
+            }
+            return nullptr;
+        }
+
+        CW_FORCEINLINE void* getCachedSyscallGadget() {
+            static void* gadget = nullptr;
+            if (!gadget) gadget = findSyscallGadget();
+            return gadget;
+        }
+
+        // indirect syscall invocation via intrinsics
+        // sets up registers and jumps to syscall;ret gadget in ntdll
+        // return address on stack will point to ntdll, not our module
+        template<typename... Args>
+        CW_NOINLINE NTSTATUS invokeSyscall(uint32_t number, Args... args) {
+            void* gadget = getCachedSyscallGadget();
+            if (!gadget || number == SYSCALL_ERROR) return static_cast<NTSTATUS>(0xC0000001);  // STATUS_UNSUCCESSFUL
+
+            // we can't do inline asm in msvc x64, so use a function pointer cast
+            // the syscall calling convention: rcx=arg1, rdx=arg2, r8=arg3, r9=arg4
+            // eax=syscall number, r10=rcx (first arg copy)
+            // we set up a function pointer to the gadget and call through it
+            // the OS syscall dispatcher reads eax for the number
+
+            // for indirect syscall we need: mov r10, rcx; mov eax, number; jmp gadget
+            // since we can't inline asm, we use a shellcode thunk allocated once
+            static thread_local uint8_t thunk[32] = {};
+            static thread_local bool thunk_init = false;
+
+            if (!thunk_init) {
+                // build: mov r10, rcx (4C 8B D1)
+                //        mov eax, imm32 (B8 XX XX XX XX)
+                //        jmp [rip+0] (FF 25 00 00 00 00) + 8-byte address
+                thunk[0] = 0x4C; thunk[1] = 0x8B; thunk[2] = 0xD1;  // mov r10, rcx
+                thunk[3] = 0xB8;  // mov eax, imm32
+                // imm32 filled below
+                thunk[8] = 0xFF; thunk[9] = 0x25; thunk[10] = 0x00; thunk[11] = 0x00;
+                thunk[12] = 0x00; thunk[13] = 0x00;  // jmp [rip+0]
+                // 8-byte gadget address at offset 14
+                DWORD old_protect;
+                VirtualProtect(thunk, sizeof(thunk), PAGE_EXECUTE_READWRITE, &old_protect);
+                thunk_init = true;
+            }
+
+            *reinterpret_cast<uint32_t*>(thunk + 4) = number;
+            *reinterpret_cast<uint64_t*>(thunk + 14) = reinterpret_cast<uint64_t>(gadget);
+            CW_COMPILER_BARRIER();
+
+            using SyscallFn = NTSTATUS(__stdcall*)(Args...);
+            auto fn = reinterpret_cast<SyscallFn>(static_cast<void*>(thunk));
+            return fn(args...);
+        }
 #endif
     }
 
     #define CW_SYSCALL_NUMBER(func) (cloakwork::syscall::getCachedSyscallNumber<CW_HASH(#func)>())
+
+#if defined(_WIN64) && !CW_KERNEL_MODE
+    #define CW_SYSCALL(func, ...) \
+        cloakwork::syscall::invokeSyscall( \
+            cloakwork::syscall::getCachedSyscallNumber<CW_HASH(#func)>(), \
+            __VA_ARGS__)
 #else
-    namespace syscall {
-        inline uint32_t getSyscallNumber(uint32_t) { return 0; }
-    }
-    #define CW_SYSCALL_NUMBER(func) (0)
+    #define CW_SYSCALL(func, ...) func(__VA_ARGS__)
 #endif
 
-    // =================================================================
-    // obfuscated comparisons
-    // =================================================================
+#else
+    namespace syscall {
+        static constexpr uint32_t SYSCALL_ERROR = UINT32_MAX;
+        inline uint32_t getSyscallNumber(uint32_t) { return SYSCALL_ERROR; }
+    }
+    #define CW_SYSCALL_NUMBER(func) (cloakwork::syscall::SYSCALL_ERROR)
+    #define CW_SYSCALL(func, ...) func(__VA_ARGS__)
+#endif
 
 #if CW_ENABLE_VALUE_OBFUSCATION
     namespace comparison {
 
-        // obfuscated equality check
         template<typename T>
         CW_FORCEINLINE bool obfuscated_equals(T a, T b) {
             if constexpr (std::is_integral_v<T>) {
@@ -3706,7 +5235,6 @@ namespace cloakwork {
             }
         }
 
-        // obfuscated not-equals check
         template<typename T>
         CW_FORCEINLINE bool obfuscated_not_equals(T a, T b) {
             if constexpr (std::is_integral_v<T>) {
@@ -3718,7 +5246,6 @@ namespace cloakwork {
             }
         }
 
-        // obfuscated less-than check
         template<typename T>
         CW_FORCEINLINE bool obfuscated_less(T a, T b) {
             if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
@@ -3735,19 +5262,16 @@ namespace cloakwork {
             }
         }
 
-        // obfuscated greater-than check
         template<typename T>
         CW_FORCEINLINE bool obfuscated_greater(T a, T b) {
             return obfuscated_less(b, a);
         }
 
-        // obfuscated less-or-equal check
         template<typename T>
         CW_FORCEINLINE bool obfuscated_less_equal(T a, T b) {
             return !obfuscated_greater(a, b);
         }
 
-        // obfuscated greater-or-equal check
         template<typename T>
         CW_FORCEINLINE bool obfuscated_greater_equal(T a, T b) {
             return !obfuscated_less(a, b);
@@ -3761,7 +5285,6 @@ namespace cloakwork {
     #define CW_LE(a, b) (cloakwork::comparison::obfuscated_less_equal((a), (b)))
     #define CW_GE(a, b) (cloakwork::comparison::obfuscated_greater_equal((a), (b)))
 #else
-    // stubs when value obfuscation is disabled
     #define CW_EQ(a, b) ((a) == (b))
     #define CW_NE(a, b) ((a) != (b))
     #define CW_LT(a, b) ((a) < (b))
@@ -3770,20 +5293,23 @@ namespace cloakwork {
     #define CW_GE(a, b) ((a) >= (b))
 #endif
 
-    // =================================================================
-    // encrypted compile-time constants
-    // =================================================================
-
     namespace constants {
 
         template<typename T, T Value, uint8_t Key = static_cast<uint8_t>(CW_RAND_CT(1, 255))>
         struct encrypted_constant {
-            static CW_FORCEINLINE T get() {
+            // store encrypted value as a non-constexpr static to prevent the compiler
+            // from seeing both the encrypted value and key in the same compile-time context,
+            // which would let LTCG constant-fold the XOR back to the original value
+            static inline volatile T stored_encrypted = Value ^ static_cast<T>(Key);
+
+            static CW_NOINLINE T get() {
+                CW_COMPILER_BARRIER();
                 if constexpr (std::is_integral_v<T>) {
-                    constexpr T encrypted = Value ^ static_cast<T>(Key);
-                    volatile T result = encrypted;
+                    volatile T enc = stored_encrypted;
                     CW_COMPILER_BARRIER();
-                    return result ^ static_cast<T>(Key);
+                    T out = enc ^ static_cast<T>(Key);
+                    CW_COMPILER_BARRIER();
+                    return out;
                 } else {
                     return Value;
                 }
@@ -3824,21 +5350,15 @@ namespace cloakwork {
     #define CW_CONST(val) \
         (cloakwork::constants::encrypted_constant<decltype(val), val>::get())
 
-    // =================================================================
-    // junk code insertion
-    // =================================================================
-
 #if CW_ENABLE_CONTROL_FLOW
     namespace junk {
 
-        // generate junk computation that looks real but does nothing useful
         template<int N = CW_RAND_CT(1, 1000)>
         CW_NOINLINE void junk_computation() {
             volatile int x = N;
             volatile int y = N * 2;
             CW_COMPILER_BARRIER();
 
-            // meaningless operations
             x = x ^ y;
             y = y + x;
             x = x - y;
@@ -3847,7 +5367,6 @@ namespace cloakwork {
 
             CW_COMPILER_BARRIER();
 
-            // dead branch that will never execute
             if (control_flow::opaque_false<N>()) {
                 volatile int z = x * y;
                 z = z >> 3;
@@ -3855,7 +5374,6 @@ namespace cloakwork {
             }
         }
 
-        // more complex junk with fake control flow
         template<int N = CW_RAND_CT(1, 1000)>
         CW_NOINLINE void junk_control_flow() {
             volatile int state = N % 5;
@@ -3881,7 +5399,6 @@ namespace cloakwork {
         }
     }
 
-    // junk code insertion macro
     #define CW_JUNK() \
         do { \
             cloakwork::junk::junk_computation<CW_RAND_CT(1, 1000)>(); \
@@ -3896,31 +5413,34 @@ namespace cloakwork {
     #define CW_JUNK_FLOW() ((void)0)
 #endif
 
-    // =================================================================
-    // return address spoofing
-    // =================================================================
-
 #if CW_ENABLE_FUNCTION_OBFUSCATION
     namespace spoof {
 
-        // find a "ret" gadget in a legitimate module
+        // find a "ret" (0xC3) gadget in ntdll's executable section
         CW_FORCEINLINE void* findRetGadget() {
-#ifdef _WIN32
+#if defined(_WIN32) && !CW_KERNEL_MODE
             __try {
                 void* ntdll = imports::getModuleBase(CW_HASH_CI("ntdll.dll"));
                 if (!ntdll) return nullptr;
 
-                auto dos = static_cast<IMAGE_DOS_HEADER*>(ntdll);
-                auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-                    reinterpret_cast<uint8_t*>(ntdll) + dos->e_lfanew);
+                IMAGE_NT_HEADERS* nt = nullptr;
+                uint32_t image_size = 0;
+                if (!imports::detail::validate_pe_header(ntdll, &nt, &image_size)) return nullptr;
 
                 auto base = reinterpret_cast<uint8_t*>(ntdll);
-                size_t size = nt->OptionalHeader.SizeOfImage;
 
-                // search for ret (0xC3) gadget
-                for (size_t i = 0; i < size - 1; ++i) {
-                    if (base[i] == 0xC3) {
-                        return base + i;
+                auto section = IMAGE_FIRST_SECTION(nt);
+                for (uint16_t i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
+                    if (!(section->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+
+                    uint32_t sec_start = section->VirtualAddress;
+                    uint32_t sec_size = section->Misc.VirtualSize;
+                    if (!imports::detail::rva_in_bounds(sec_start, sec_size, image_size)) continue;
+
+                    for (uint32_t j = 0; j < sec_size; ++j) {
+                        if (base[sec_start + j] == 0xC3) {
+                            return base + sec_start + j;
+                        }
                     }
                 }
             }
@@ -3931,17 +5451,15 @@ namespace cloakwork {
             return nullptr;
         }
 
-        // cached ret gadget
         CW_FORCEINLINE void* getRetGadget() {
             static void* gadget = nullptr;
-            if (!gadget) {
-                gadget = findRetGadget();
-            }
+            if (!gadget) gadget = findRetGadget();
             return gadget;
         }
 
-        // spoofed call wrapper - stores real return address and uses gadget
-        // note: full implementation requires asm for stack manipulation
+        // return address spoofing using _AddressOfReturnAddress intrinsic
+        // overwrites our return address with a gadget address (ret in ntdll)
+        // so call stacks show ntdll instead of our module
         template<typename Ret, typename... Args>
         class spoofed_call {
         private:
@@ -3952,10 +5470,33 @@ namespace cloakwork {
         public:
             spoofed_call(FuncPtr f) : func(f), gadget(getRetGadget()) {}
 
-            CW_FORCEINLINE Ret operator()(Args... args) {
-                // simplified version - full spoof requires asm
-                CW_COMPILER_BARRIER();
-                return func(args...);
+            CW_NOINLINE Ret operator()(Args... args) {
+#if defined(_WIN64)
+                if (gadget) {
+                    // get pointer to our return address on the stack
+                    void** ret_addr_ptr = reinterpret_cast<void**>(_AddressOfReturnAddress());
+                    void* real_return = *ret_addr_ptr;
+
+                    // overwrite with gadget (ret instruction in ntdll)
+                    // when the callee returns, the stack will show ntdll
+                    *ret_addr_ptr = gadget;
+                    CW_COMPILER_BARRIER();
+
+                    if constexpr (std::is_void_v<Ret>) {
+                        func(args...);
+                        // restore real return address
+                        *ret_addr_ptr = real_return;
+                    } else {
+                        Ret result = func(args...);
+                        // restore real return address so we can actually return
+                        *ret_addr_ptr = real_return;
+                        return result;
+                    }
+                } else
+#endif
+                {
+                    return func(args...);
+                }
             }
         };
     }
@@ -3969,14 +5510,9 @@ namespace cloakwork {
     #define CW_SPOOF_CALL(func) (func)
 #endif
 
-    // =================================================================
-    // self-integrity verification
-    // =================================================================
-
 #if CW_ENABLE_INTEGRITY_CHECKS
     namespace integrity {
 
-        // compute hash of memory region
         CW_FORCEINLINE uint32_t computeHash(const void* data, size_t size) {
             const uint8_t* bytes = static_cast<const uint8_t*>(data);
             uint32_t hash = 0x811c9dc5;
@@ -3989,7 +5525,6 @@ namespace cloakwork {
             return hash;
         }
 
-        // integrity-checked function wrapper
         template<typename Func>
         class integrity_checked {
         private:
@@ -4006,13 +5541,11 @@ namespace cloakwork {
 
             template<typename... Args>
             CW_FORCEINLINE auto operator()(Args&&... args) {
-                // periodic integrity check
                 if ((++checkCount % 100) == 0) {
                     uint32_t currentHash = computeHash(
                         reinterpret_cast<const void*>(func), codeSize);
 
                     if (currentHash != expectedHash) {
-                        // tampered - crash
 #if CW_ANTI_DEBUG_RESPONSE == 1
                         __debugbreak();
                         *(volatile int*)0 = 0;
@@ -4030,7 +5563,6 @@ namespace cloakwork {
             }
         };
 
-        // check for common hook patterns at function start
         CW_FORCEINLINE bool detectHook(const void* func) {
 #ifdef _WIN32
             const uint8_t* bytes = static_cast<const uint8_t*>(func);
@@ -4053,7 +5585,6 @@ namespace cloakwork {
             return false;
         }
 
-        // verify multiple functions at once
         template<typename... Funcs>
         CW_FORCEINLINE bool verifyFunctions(Funcs*... funcs) {
             return ((!detectHook(reinterpret_cast<const void*>(funcs))) && ...);
@@ -4076,16 +5607,167 @@ namespace cloakwork {
     #define CW_DETECT_HOOK(func) (false)
 #endif
 
-    // =================================================================
-    // convenience macros
-    // =================================================================
+    namespace pe_erase {
+
+        // zero DOS header, NT headers, and section table to prevent dumping
+        CW_FORCEINLINE bool erase_pe_header() {
+#if defined(_WIN32) && !CW_KERNEL_MODE
+            __try {
+                HMODULE module = GetModuleHandleA(nullptr);
+                if (!module) return false;
+
+                auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(module);
+                if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+                if (dos->e_lfanew <= 0 || dos->e_lfanew >= 0x1000) return false;
+
+                auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+                    reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
+                if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+
+                size_t header_size = dos->e_lfanew +
+                    sizeof(IMAGE_NT_HEADERS) +
+                    (nt->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
+
+                DWORD old_protect;
+                if (!VirtualProtect(module, header_size, PAGE_READWRITE, &old_protect))
+                    return false;
+
+                volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(module);
+                for (size_t i = 0; i < header_size; ++i)
+                    p[i] = 0;
+
+                VirtualProtect(module, header_size, old_protect, &old_protect);
+                return true;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {
+                return false;
+            }
+#elif CW_KERNEL_MODE
+            // kernel mode: zero driver PE header via MmGetSystemRoutineAddress
+            // requires the driver's base address to be passed in
+            return false;  // caller should use erase_driver_header(base)
+#else
+            return false;
+#endif
+        }
+
+#if CW_KERNEL_MODE
+        // kernel mode: erase a driver's PE header given its base address
+        CW_FORCEINLINE bool erase_driver_header(void* driver_base) {
+            if (!driver_base || !MmIsAddressValid(driver_base)) return false;
+
+            auto dos = static_cast<IMAGE_DOS_HEADER*>(driver_base);
+            if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+            if (dos->e_lfanew <= 0 || dos->e_lfanew >= 0x1000) return false;
+
+            auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+                reinterpret_cast<uint8_t*>(driver_base) + dos->e_lfanew);
+            if (!MmIsAddressValid(nt)) return false;
+            if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+
+            size_t header_size = dos->e_lfanew +
+                sizeof(IMAGE_NT_HEADERS) +
+                (nt->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
+
+            volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(driver_base);
+            for (size_t i = 0; i < header_size; ++i)
+                p[i] = 0;
+
+            return true;
+        }
+#endif
+    }
+
+#if CW_ENABLE_ANTI_DEBUG && defined(_WIN32) && !CW_KERNEL_MODE
+    namespace anti_debug {
+        namespace enhanced {
+
+            CW_FORCEINLINE bool check_debug_port() {
+                __try {
+                    typedef NTSTATUS(NTAPI* NtQueryInformationProcessFn)(
+                        HANDLE, ULONG, PVOID, ULONG, PULONG);
+
+                    static NtQueryInformationProcessFn NtQueryInformationProcess = nullptr;
+                    static bool resolved = false;
+
+                    if (!resolved) {
+                        void* ntdll = imports::getModuleBase(CW_HASH_CI("ntdll.dll"));
+                        if (ntdll) {
+                            NtQueryInformationProcess = reinterpret_cast<NtQueryInformationProcessFn>(
+                                imports::getProcAddress(ntdll, CW_HASH("NtQueryInformationProcess")));
+                        }
+                        resolved = true;
+                    }
+
+                    if (!NtQueryInformationProcess) return false;
+
+                    // ProcessDebugPort (0x7) - nonzero if debugger attached
+                    ULONG_PTR debug_port = 0;
+                    NTSTATUS status = NtQueryInformationProcess(
+                        GetCurrentProcess(), 0x7, &debug_port, sizeof(debug_port), nullptr);
+                    if (status == 0 && debug_port != 0) return true;
+
+                    // ProcessDebugObjectHandle (0x1E) - handle exists if debugger attached
+                    HANDLE debug_object = nullptr;
+                    status = NtQueryInformationProcess(
+                        GetCurrentProcess(), 0x1E, &debug_object, sizeof(debug_object), nullptr);
+                    if (status == 0) return true;  // STATUS_SUCCESS means debug object exists
+
+                    // ProcessDebugFlags (0x1F) - 0 means debugger present
+                    ULONG debug_flags = 1;
+                    status = NtQueryInformationProcess(
+                        GetCurrentProcess(), 0x1F, &debug_flags, sizeof(debug_flags), nullptr);
+                    if (status == 0 && debug_flags == 0) return true;
+
+                    return false;
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER) {
+                    return false;
+                }
+            }
+
+            CW_FORCEINLINE bool hide_from_debugger() {
+                __try {
+                    typedef NTSTATUS(NTAPI* NtSetInformationThreadFn)(
+                        HANDLE, ULONG, PVOID, ULONG);
+
+                    static NtSetInformationThreadFn NtSetInformationThread = nullptr;
+                    static bool resolved = false;
+
+                    if (!resolved) {
+                        void* ntdll = imports::getModuleBase(CW_HASH_CI("ntdll.dll"));
+                        if (ntdll) {
+                            NtSetInformationThread = reinterpret_cast<NtSetInformationThreadFn>(
+                                imports::getProcAddress(ntdll, CW_HASH("NtSetInformationThread")));
+                        }
+                        resolved = true;
+                    }
+
+                    if (!NtSetInformationThread) return false;
+
+                    // ThreadHideFromDebugger (0x11)
+                    NTSTATUS status = NtSetInformationThread(
+                        GetCurrentThread(), 0x11, nullptr, 0);
+                    return (status == 0);
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER) {
+                    return false;
+                }
+            }
+        }
+    }
+#endif
 
     #if CW_ENABLE_VALUE_OBFUSCATION
         #define CW_INT(x) (cloakwork::obfuscated_value<decltype(x)>{x})
         #define CW_MBA(x) (cloakwork::mba_obfuscated<decltype(x)>{x})
+
+        // obfuscated XOR using MBA: a ^ b = (a | b) - (a & b) ... via MBA transforms
+        #define CW_XOR(a, b) (CW_SUB(CW_OR((a), (b)), CW_AND((a), (b))))
     #else
         #define CW_INT(x) (x)
         #define CW_MBA(x) (x)
+        #define CW_XOR(a, b) ((a) ^ (b))
     #endif
 
     #if CW_ENABLE_FUNCTION_OBFUSCATION
@@ -4119,6 +5801,164 @@ namespace cloakwork {
     #else
         #define CW_BRANCH(cond) if(cond)
     #endif
+
+    #define CW_ERASE_PE_HEADER() (cloakwork::pe_erase::erase_pe_header())
+
+    // erases debug-related IAT entries (IsDebuggerPresent, strstr, etc.)
+    // that leak as signatures even when not used by our code (CRT linkage)
+
+    namespace iat_scrub {
+
+        CW_FORCEINLINE bool scrub_debug_imports() {
+#if defined(_WIN32) && !CW_KERNEL_MODE
+            __try {
+                HMODULE module = GetModuleHandleA(nullptr);
+                if (!module) return false;
+
+                auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(module);
+                if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+                if (dos->e_lfanew <= 0 || dos->e_lfanew >= 0x1000) return false;
+
+                auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+                    reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
+                if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+
+                auto& import_dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+                if (import_dir.VirtualAddress == 0) return false;
+
+                auto base = reinterpret_cast<uint8_t*>(module);
+                auto import_desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(
+                    base + import_dir.VirtualAddress);
+
+                constexpr uint32_t scrub_hashes[] = {
+                    CW_HASH("IsDebuggerPresent"),
+                    CW_HASH("CheckRemoteDebuggerPresent"),
+                    CW_HASH("OutputDebugStringA"),
+                    CW_HASH("OutputDebugStringW"),
+                };
+
+                for (; import_desc->Name; ++import_desc) {
+                    auto thunk_ref = reinterpret_cast<IMAGE_THUNK_DATA*>(
+                        base + import_desc->OriginalFirstThunk);
+                    auto func_ref = reinterpret_cast<IMAGE_THUNK_DATA*>(
+                        base + import_desc->FirstThunk);
+
+                    for (; thunk_ref->u1.AddressOfData; ++thunk_ref, ++func_ref) {
+                        if (IMAGE_SNAP_BY_ORDINAL(thunk_ref->u1.Ordinal)) continue;
+
+                        auto import_name = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(
+                            base + thunk_ref->u1.AddressOfData);
+
+                        uint32_t name_hash = hash::fnv1a_runtime(
+                            reinterpret_cast<const char*>(import_name->Name));
+
+                        for (auto h : scrub_hashes) {
+                            if (name_hash == h) {
+                                DWORD old_protect;
+                                if (VirtualProtect(&func_ref->u1.Function,
+                                    sizeof(func_ref->u1.Function),
+                                    PAGE_READWRITE, &old_protect)) {
+                                    func_ref->u1.Function = reinterpret_cast<ULONG_PTR>(
+                                        static_cast<BOOL(WINAPI*)()>([]() -> BOOL { return FALSE; }));
+                                    VirtualProtect(&func_ref->u1.Function,
+                                        sizeof(func_ref->u1.Function),
+                                        old_protect, &old_protect);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {
+                return false;
+            }
+#endif
+            return false;
+        }
+    }
+
+    #define CW_SCRUB_DEBUG_IMPORTS() (cloakwork::iat_scrub::scrub_debug_imports())
+
+#if CW_ENABLE_ANTI_DEBUG && defined(_WIN32) && !CW_KERNEL_MODE
+    #define CW_HIDE_THREAD() (cloakwork::anti_debug::enhanced::hide_from_debugger())
+    #define CW_CHECK_DEBUG_PORT() (cloakwork::anti_debug::enhanced::check_debug_port())
+#else
+    #define CW_HIDE_THREAD() ((void)0)
+    #define CW_CHECK_DEBUG_PORT() (false)
+#endif
+
+#if CW_ENABLE_VALUE_OBFUSCATION
+    using obf_bool = bool_obfuscation::obfuscated_bool<>;
+#else
+    using obf_bool = bool_obfuscation::obfuscated_bool;
+#endif
+
+#if CW_ENABLE_METAMORPHIC
+    template<typename Sig>
+    using meta_func = metamorphic::metamorphic_function<Sig>;
+#else
+    template<typename Sig>
+    using meta_func = metamorphic::metamorphic_function<Sig>;
+#endif
+
+    template<typename T>
+    using rt_const = constants::runtime_constant<T>;
+
+#if CW_ENABLE_ANTI_DEBUG
+    #define CW_IS_DEBUGGED()             (cloakwork::anti_debug::is_debugger_present())
+    #define CW_HAS_HWBP()               (cloakwork::anti_debug::has_hardware_breakpoints())
+    #define CW_CHECK_DEBUG()             (cloakwork::anti_debug::comprehensive_check())
+    #define CW_DETECT_HIDING()           (cloakwork::anti_debug::advanced::detect_hiding_tools())
+    #define CW_DETECT_PARENT()           (cloakwork::anti_debug::advanced::suspicious_parent_process())
+    #define CW_DETECT_KERNEL_DBG()       (cloakwork::anti_debug::advanced::kernel_debugger_present())
+    #define CW_TIMING_CHECK()            (cloakwork::anti_debug::advanced::advanced_timing_check())
+    #define CW_DETECT_DBG_ARTIFACTS()    (cloakwork::anti_debug::advanced::detect_debugger_artifacts())
+#else
+    #define CW_IS_DEBUGGED()             (false)
+    #define CW_HAS_HWBP()               (false)
+    #define CW_CHECK_DEBUG()             (false)
+    #define CW_DETECT_HIDING()           (false)
+    #define CW_DETECT_PARENT()           (false)
+    #define CW_DETECT_KERNEL_DBG()       (false)
+    #define CW_TIMING_CHECK()            (false)
+    #define CW_DETECT_DBG_ARTIFACTS()    (false)
+#endif
+
+#if CW_ENABLE_ANTI_VM
+    #define CW_DETECT_HYPERVISOR()       (cloakwork::anti_debug::anti_vm::is_hypervisor_present())
+    #define CW_DETECT_VM_VENDOR()        (cloakwork::anti_debug::anti_vm::detect_vm_vendor())
+    #define CW_DETECT_LOW_RESOURCES()    (cloakwork::anti_debug::anti_vm::detect_low_resources())
+    #define CW_DETECT_SANDBOX_DLLS()     (cloakwork::anti_debug::anti_vm::detect_sandbox_dlls())
+#else
+    #define CW_DETECT_HYPERVISOR()       (false)
+    #define CW_DETECT_VM_VENDOR()        (false)
+    #define CW_DETECT_LOW_RESOURCES()    (false)
+    #define CW_DETECT_SANDBOX_DLLS()     (false)
+#endif
+
+#if CW_ENABLE_IMPORT_HIDING
+    #define CW_GET_MODULE(name)          (cloakwork::imports::getModuleBase(CW_HASH_CI(name)))
+    #define CW_GET_PROC(mod, func)       (cloakwork::imports::getProcAddress(mod, CW_HASH(func)))
+#endif
+
+    #define CW_HASH_RT(str)              (cloakwork::hash::fnv1a_runtime(str))
+    #define CW_HASH_RT_CI(str)           (cloakwork::hash::fnv1a_runtime_ci(str))
+
+#if CW_ENABLE_INTEGRITY_CHECKS
+    #define CW_COMPUTE_HASH(ptr, size)   (cloakwork::integrity::computeHash(ptr, size))
+    #define CW_VERIFY_FUNCS(...)         (cloakwork::integrity::verifyFunctions(__VA_ARGS__))
+#endif
+
+    #define CW_RET_GADGET()              (cloakwork::spoof::getRetGadget())
+
+    // MBA negation (completes CW_ADD / CW_SUB / CW_AND / CW_OR set)
+#if CW_ENABLE_VALUE_OBFUSCATION
+    #define CW_NEG(a)                    (cloakwork::mba::neg_mba(a))
+#else
+    #define CW_NEG(a)                    (-(a))
+#endif
 
 } // namespace cloakwork
 

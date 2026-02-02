@@ -25,36 +25,38 @@ struct secret_data {
 };
 
 int main() {
-    std::cout << "=== CLOAKWORK COMPREHENSIVE DEMO ===" << std::endl;
-    std::cout << "demonstrating obfuscation, encryption, and anti-debug features" << std::endl;
-    std::cout << "NOTE: crash-on-debug features disabled for demo (shows detections without crashing)" << std::endl << std::endl;
+    CW_SCRUB_DEBUG_IMPORTS();
+
+    std::cout << CW_STR("=== CLOAKWORK COMPREHENSIVE DEMO ===") << std::endl;
+    std::cout << CW_STR("demonstrating obfuscation, encryption, and anti-debug features") << std::endl;
+    std::cout << CW_STR("NOTE: crash-on-debug features disabled for demo (shows detections without crashing)") << std::endl << std::endl;
 
     // ==================================================================
     // 1. BASIC STRING ENCRYPTION (compile-time + runtime)
     // ==================================================================
-    std::cout << "[1] String Encryption Demo" << std::endl;
+    std::cout << CW_STR("[1] String Encryption Demo") << std::endl;
 
     // strings are encrypted at compile-time with unique per-execution keys
     const char* encrypted_msg = CW_STR("this string is encrypted at compile-time!");
-    std::cout << "   encrypted: " << encrypted_msg << std::endl;
+    std::cout << CW_STR("   encrypted: ") << encrypted_msg << std::endl;
 
     const char* another_msg = CW_STR("each execution has different runtime keys");
-    std::cout << "   runtime entropy: " << another_msg << std::endl << std::endl;
+    std::cout << CW_STR("   runtime entropy: ") << another_msg << std::endl << std::endl;
 
     // ==================================================================
     // 2. ENHANCED STRING ENCRYPTION (multi-layer + stack-based)
     // ==================================================================
-    std::cout << "[2] Enhanced String Encryption Demo" << std::endl;
+    std::cout << CW_STR("[2] Enhanced String Encryption Demo") << std::endl;
 
     // multi-layer encrypted string (3 encryption layers + polymorphic re-encryption)
     const char* layered_msg = CW_STR_LAYERED("triple-layer encrypted string with polymorphic decryption!");
-    std::cout << "   layered encryption: " << layered_msg << std::endl;
+    std::cout << CW_STR("   layered encryption: ") << layered_msg << std::endl;
 
     // stack-based encrypted string (auto-clears on scope exit)
     {
         auto stack_msg = CW_STR_STACK("this string auto-clears when leaving scope");
-        std::cout << "   stack-based encryption: " << stack_msg.get() << std::endl;
-        std::cout << "   (buffer will be overwritten with random data on scope exit)" << std::endl;
+        std::cout << CW_STR("   stack-based encryption: ") << stack_msg.get() << std::endl;
+        std::cout << CW_STR("   (buffer will be overwritten with random data on scope exit)") << std::endl;
     }
 
     std::cout << std::endl;
@@ -62,45 +64,45 @@ int main() {
     // ==================================================================
     // 3. ANTI-DEBUG PROTECTION
     // ==================================================================
-    std::cout << "[3] Anti-Debug Protection Demo" << std::endl;
-    std::cout << "   checking for debuggers and analysis tools..." << std::endl;
+    std::cout << CW_STR("[3] Anti-Debug Protection Demo") << std::endl;
+    std::cout << CW_STR("   checking for debuggers and analysis tools...") << std::endl;
 
     // individual checks for demonstration (non-crashing)
     bool any_detected = false;
 
-    if (cloakwork::anti_debug::is_debugger_present()) {
-        std::cout << "   WARNING: basic debugger detected!" << std::endl;
+    if (CW_IS_DEBUGGED()) {
+        std::cout << CW_STR("   WARNING: basic debugger detected!") << std::endl;
         any_detected = true;
     } else {
-        std::cout << "   basic debugger check: clean" << std::endl;
+        std::cout << CW_STR("   basic debugger check: clean") << std::endl;
     }
 
-    if (cloakwork::anti_debug::has_hardware_breakpoints()) {
-        std::cout << "   WARNING: hardware breakpoints detected!" << std::endl;
+    if (CW_HAS_HWBP()) {
+        std::cout << CW_STR("   WARNING: hardware breakpoints detected!") << std::endl;
         any_detected = true;
     } else {
-        std::cout << "   hardware breakpoint check: clean" << std::endl;
+        std::cout << CW_STR("   hardware breakpoint check: clean") << std::endl;
     }
 
-    if (cloakwork::anti_debug::advanced::detect_hiding_tools()) {
-        std::cout << "   WARNING: anti-anti-debug tools detected!" << std::endl;
+    if (CW_DETECT_HIDING()) {
+        std::cout << CW_STR("   WARNING: anti-anti-debug tools detected!") << std::endl;
         any_detected = true;
     } else {
-        std::cout << "   hiding tools check: clean" << std::endl;
+        std::cout << CW_STR("   hiding tools check: clean") << std::endl;
     }
 
-    if (cloakwork::anti_debug::advanced::suspicious_parent_process()) {
-        std::cout << "   WARNING: suspicious parent process!" << std::endl;
+    if (CW_DETECT_PARENT()) {
+        std::cout << CW_STR("   WARNING: suspicious parent process!") << std::endl;
         any_detected = true;
     } else {
-        std::cout << "   parent process check: clean" << std::endl;
+        std::cout << CW_STR("   parent process check: clean") << std::endl;
     }
 
     // note: comprehensive check would crash if debugger detected (commented out for demo)
     // CW_ANTI_DEBUG();
 
     if (any_detected) {
-        std::cout << "   NOTE: in production, CW_ANTI_DEBUG() would crash here" << std::endl;
+        std::cout << CW_STR("   NOTE: in production, CW_ANTI_DEBUG() would crash here") << std::endl;
     }
 
     std::cout << std::endl;
@@ -108,171 +110,342 @@ int main() {
     // ==================================================================
     // 4. VALUE OBFUSCATION
     // ==================================================================
-    std::cout << "[4] Value Obfuscation Demo" << std::endl;
+    std::cout << CW_STR("[4] Value Obfuscation Demo") << std::endl;
 
     // obfuscated integer - stored with xor/rotation/addition layers
     auto obfuscated_number = CW_INT(42);
-    std::cout << "   obfuscated value (multi-layer): " << obfuscated_number.get() << std::endl;
+    std::cout << CW_STR("   obfuscated value (multi-layer): ") << obfuscated_number.get() << std::endl;
 
     // MBA (mixed boolean arithmetic) obfuscation
     auto mba_number = CW_MBA(1337);
-    std::cout << "   MBA obfuscated value: " << mba_number.get() << std::endl;
+    std::cout << CW_STR("   MBA obfuscated value: ") << mba_number.get() << std::endl;
 
     // polymorphic value - mutates internal representation
     auto poly_value = CW_POLY(12345);
-    std::cout << "   polymorphic value: " << static_cast<int>(poly_value) << std::endl;
+    std::cout << CW_STR("   polymorphic value: ") << static_cast<int>(poly_value) << std::endl;
 
     // scattered across memory - prevents memory dumping
     secret_data my_data = { 1001, 5, static_cast<int>(0xDEADBEEF) };
     auto scattered = CW_SCATTER(my_data);
     secret_data retrieved = scattered.get();
-    std::cout << "   scattered data recovered - user_id: " << retrieved.user_id << std::endl;
+    std::cout << CW_STR("   scattered data recovered - user_id: ") << retrieved.user_id << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 5. BOOLEAN OBFUSCATION DEMO
     // ==================================================================
-    std::cout << "[5] Boolean Obfuscation Demo" << std::endl;
+    std::cout << CW_STR("[5] Boolean Obfuscation Demo") << std::endl;
 
     // CW_TRUE and CW_FALSE - obfuscated constants using opaque predicates
-    std::cout << "   testing CW_TRUE: ";
+    std::cout << CW_STR("   testing CW_TRUE: ");
     if (CW_TRUE) {
-        std::cout << "always executes (correct)" << std::endl;
+        std::cout << CW_STR("always executes (correct)") << std::endl;
     } else {
-        std::cout << "ERROR - should not happen" << std::endl;
+        std::cout << CW_STR("ERROR - should not happen") << std::endl;
     }
 
-    std::cout << "   testing CW_FALSE: ";
+    std::cout << CW_STR("   testing CW_FALSE: ");
     if (CW_FALSE) {
-        std::cout << "ERROR - should not happen" << std::endl;
+        std::cout << CW_STR("ERROR - should not happen") << std::endl;
     } else {
-        std::cout << "never executes true branch (correct)" << std::endl;
+        std::cout << CW_STR("never executes true branch (correct)") << std::endl;
     }
 
     // CW_BOOL - obfuscate boolean expressions
     int test_x = 50;
     int test_y = 100;
     bool obf_result = CW_BOOL(test_x < test_y);
-    std::cout << "   CW_BOOL(50 < 100) = " << (obf_result ? "true" : "false") << " (expected: true)" << std::endl;
+    std::cout << CW_STR("   CW_BOOL(50 < 100) = ") << (obf_result ? CW_STR("true") : CW_STR("false")) << CW_STR(" (expected: true)") << std::endl;
 
     bool obf_result2 = CW_BOOL(test_x > test_y);
-    std::cout << "   CW_BOOL(50 > 100) = " << (obf_result2 ? "true" : "false") << " (expected: false)" << std::endl;
+    std::cout << CW_STR("   CW_BOOL(50 > 100) = ") << (obf_result2 ? CW_STR("true") : CW_STR("false")) << CW_STR(" (expected: false)") << std::endl;
 
     // obfuscated_bool class for persistent storage
-    cloakwork::bool_obfuscation::obfuscated_bool license_flag(true);
-    std::cout << "   obfuscated_bool(true).get() = " << (license_flag.get() ? "true" : "false") << std::endl;
+    cloakwork::obf_bool license_flag(true);
+    std::cout << CW_STR("   obfuscated_bool(true).get() = ") << (license_flag.get() ? CW_STR("true") : CW_STR("false")) << std::endl;
 
     license_flag = false;
-    std::cout << "   after setting to false: " << (license_flag.get() ? "true" : "false") << std::endl;
+    std::cout << CW_STR("   after setting to false: ") << (license_flag.get() ? CW_STR("true") : CW_STR("false")) << std::endl;
 
     // demonstrate logical operators
-    cloakwork::bool_obfuscation::obfuscated_bool flag_a(true);
-    cloakwork::bool_obfuscation::obfuscated_bool flag_b(false);
-    std::cout << "   !obfuscated_bool(true) = " << ((!flag_a).get() ? "true" : "false") << " (expected: false)" << std::endl;
-    std::cout << "   obfuscated_bool(true) && false = " << ((flag_a && false).get() ? "true" : "false") << " (expected: false)" << std::endl;
-    std::cout << "   obfuscated_bool(false) || true = " << ((flag_b || true).get() ? "true" : "false") << " (expected: true)" << std::endl;
+    cloakwork::obf_bool flag_a(true);
+    cloakwork::obf_bool flag_b(false);
+    std::cout << CW_STR("   !obfuscated_bool(true) = ") << ((!flag_a).get() ? CW_STR("true") : CW_STR("false")) << CW_STR(" (expected: false)") << std::endl;
+    std::cout << CW_STR("   obfuscated_bool(true) && false = ") << ((flag_a && false).get() ? CW_STR("true") : CW_STR("false")) << CW_STR(" (expected: false)") << std::endl;
+    std::cout << CW_STR("   obfuscated_bool(false) || true = ") << ((flag_b || true).get() ? CW_STR("true") : CW_STR("false")) << CW_STR(" (expected: true)") << std::endl;
 
-    std::cout << "   (booleans stored as multi-byte patterns, not simple 0/1)" << std::endl;
+    std::cout << CW_STR("   (booleans stored as multi-byte patterns, not simple 0/1)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 6. MIXED BOOLEAN ARITHMETIC (MBA) DEMO
     // ==================================================================
-    std::cout << "[6] Mixed Boolean Arithmetic Demo" << std::endl;
+    std::cout << CW_STR("[6] Mixed Boolean Arithmetic Demo") << std::endl;
 
     // demonstrate MBA transformations (normally hidden inside obfuscation)
-    using namespace cloakwork::mba;
-
     int val1 = 100;
     int val2 = 50;
 
     // MBA addition: (x ^ y) + 2 * (x & y)
-    int mba_add_result = add_mba(val1, val2);
-    std::cout << "   MBA add(100, 50) = " << mba_add_result << " (expected: 150)" << std::endl;
+    int mba_add_result = CW_ADD(val1, val2);
+    std::cout << CW_STR("   MBA add(100, 50) = ") << mba_add_result << CW_STR(" (expected: 150)") << std::endl;
 
     // MBA subtraction: (x ^ y) - 2 * (~x & y)
-    int mba_sub_result = sub_mba(val1, val2);
-    std::cout << "   MBA sub(100, 50) = " << mba_sub_result << " (expected: 50)" << std::endl;
+    int mba_sub_result = CW_SUB(val1, val2);
+    std::cout << CW_STR("   MBA sub(100, 50) = ") << mba_sub_result << CW_STR(" (expected: 50)") << std::endl;
 
     // MBA negation: ~x + 1
-    int mba_neg_result = neg_mba(42);
-    std::cout << "   MBA neg(42) = " << mba_neg_result << " (expected: -42)" << std::endl;
+    int mba_neg_result = CW_NEG(42);
+    std::cout << CW_STR("   MBA neg(42) = ") << mba_neg_result << CW_STR(" (expected: -42)") << std::endl;
 
-    std::cout << "   (these transformations hide arithmetic from static analysis)" << std::endl;
+    std::cout << CW_STR("   (these transformations hide arithmetic from static analysis)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 7. CONTROL FLOW OBFUSCATION
     // ==================================================================
-    std::cout << "[7] Control Flow Obfuscation Demo" << std::endl;
+    std::cout << CW_STR("[7] Control Flow Obfuscation Demo") << std::endl;
 
     auto test_value_obf = CW_INT(100);
     int test_value = test_value_obf.get();
 
     // obfuscated if/else with opaque predicates
     CW_IF(test_value > 50) {
-        std::cout << "   obfuscated if: value is greater than 50" << std::endl;
+        std::cout << CW_STR("   obfuscated if: value is greater than 50") << std::endl;
     } CW_ELSE {
-        std::cout << "   obfuscated else: this shouldn't execute" << std::endl;
+        std::cout << CW_STR("   obfuscated else: this shouldn't execute") << std::endl;
     }
 
     // obfuscated branching
     CW_BRANCH(test_value == 100) {
-        std::cout << "   obfuscated branch: value equals 100" << std::endl;
+        std::cout << CW_STR("   obfuscated branch: value equals 100") << std::endl;
     }
 
     std::cout << std::endl;
 
     // ==================================================================
-    // 8. CONTROL FLOW FLATTENING
+    // 8. CONTROL FLOW FLATTENING (function wrapper)
     // ==================================================================
-    std::cout << "[8] Control Flow Flattening Demo" << std::endl;
+    std::cout << CW_STR("[8] Control Flow Flattening Demo (function wrapper)") << std::endl;
 
     // flatten the control flow via state machine
     auto flattened_result = CW_FLATTEN(calculate_something, 15);
-    std::cout << "   flattened function result: " << flattened_result << std::endl;
-    std::cout << "   (in IDA: this will show complex state machine)" << std::endl;
+    std::cout << CW_STR("   CW_FLATTEN result: ") << flattened_result << std::endl;
+    std::cout << CW_STR("   (wraps function call in switch-based state machine)") << std::endl;
+
+    std::cout << std::endl;
+
+    // ==================================================================
+    // 8b. CFG FLATTENING (block-level state machine)
+    // ==================================================================
+    std::cout << CW_STR("[8b] CFG Flattening Demo (block-level)") << std::endl;
+    std::cout << CW_STR("   transforming structured code into encrypted state machine...") << std::endl;
+
+    // demo 1: simple conditional flattened into state machine
+    // original: if (input > 20) result = input * 3; else result = input + 100;
+    int cfg_input = 15;
+    int cfg_result1 = CW_FLAT_FUNC(int)
+        CW_FLAT_VARS(
+            int temp = 0;
+        )
+        CW_FLAT_ENTRY(0)
+    CW_FLAT_BEGIN
+        CW_FLAT_BLOCK(0)
+            temp = cfg_input;
+            CW_FLAT_IF(temp > 20, 1, 2)
+
+        CW_FLAT_BLOCK(1)
+            temp = temp * 3;
+            CW_FLAT_GOTO(3)
+
+        CW_FLAT_BLOCK(2)
+            temp = temp + 100;
+            CW_FLAT_GOTO_OBF(3)
+
+        CW_FLAT_BLOCK(3)
+            CW_FLAT_RETURN(temp)
+    CW_FLAT_END;
+
+    std::cout << CW_STR("   conditional: if(15 > 20) 15*3 else 15+100 = ") << cfg_result1
+              << CW_STR(" (expected: 115)") << std::endl;
+
+    // demo 2: loop flattened into state machine
+    // original: while (x > 0) { acc += x; x -= 3; } return acc;
+    int cfg_result2 = CW_FLAT_FUNC(int)
+        CW_FLAT_VARS(
+            int x = 0;
+            int acc = 0;
+        )
+        CW_FLAT_ENTRY(10)
+    CW_FLAT_BEGIN
+        CW_FLAT_BLOCK(10)
+            x = cfg_input * 2;
+            acc = 0;
+            CW_FLAT_GOTO(11)
+
+        CW_FLAT_BLOCK(11)
+            CW_FLAT_IF_OBF(x > 0, 12, 13)
+
+        CW_FLAT_BLOCK(12)
+            acc += x;
+            x -= 3;
+            CW_FLAT_GOTO(11)
+
+        CW_FLAT_BLOCK(13)
+            CW_FLAT_RETURN(acc)
+    CW_FLAT_END;
+
+    std::cout << CW_STR("   loop: sum(30,27,24,...,3) = ") << cfg_result2
+              << CW_STR(" (expected: 165)") << std::endl;
+
+    // demo 3: nested branches with multi-way dispatch
+    int cfg_result3 = CW_FLAT_FUNC(int)
+        CW_FLAT_VARS(
+            int val = 0;
+            int mode = 0;
+        )
+        CW_FLAT_ENTRY(0)
+    CW_FLAT_BEGIN
+        CW_FLAT_BLOCK(0)
+            mode = cfg_input % 3;
+            val = cfg_input;
+            CW_FLAT_SWITCH3(mode, 0,1, 1,2, 2,3, 4)
+
+        CW_FLAT_BLOCK(1)
+            val = val * 10;
+            CW_FLAT_GOTO(5)
+
+        CW_FLAT_BLOCK(2)
+            val = val + 1000;
+            CW_FLAT_GOTO(5)
+
+        CW_FLAT_BLOCK(3)
+            val = val - 5;
+            CW_FLAT_GOTO(5)
+
+        CW_FLAT_BLOCK(4)
+            val = -1;
+            CW_FLAT_GOTO(5)
+
+        CW_FLAT_BLOCK(5)
+            CW_FLAT_RETURN(val)
+    CW_FLAT_END;
+
+    // 15 % 3 == 0, so mode 0 -> block 1: 15 * 10 = 150
+    std::cout << CW_STR("   switch: mode=15%3=0 -> 15*10 = ") << cfg_result3
+              << CW_STR(" (expected: 150)") << std::endl;
+
+    // demo 4: void flattened function
+    int side_effect = 0;
+    CW_FLAT_VOID
+        CW_FLAT_VARS(
+            int counter = 0;
+        )
+        CW_FLAT_ENTRY(0)
+    CW_FLAT_BEGIN
+        CW_FLAT_BLOCK(0)
+            counter = 5;
+            CW_FLAT_GOTO(1)
+
+        CW_FLAT_BLOCK(1)
+            CW_FLAT_IF(counter > 0, 2, 3)
+
+        CW_FLAT_BLOCK(2)
+            side_effect += counter;
+            counter--;
+            CW_FLAT_GOTO(1)
+
+        CW_FLAT_BLOCK(3)
+            CW_FLAT_EXIT()
+    CW_FLAT_VOID_END;
+
+    // 5+4+3+2+1 = 15
+    std::cout << CW_STR("   void: sum(5..1) side_effect = ") << side_effect
+              << CW_STR(" (expected: 15)") << std::endl;
+
+    std::cout << CW_STR("   (IDA sees: encrypted state dispatcher + 6 dead blocks + opaque predicates)") << std::endl;
+    std::cout << CW_STR("   (state values derived from compile-time keyed hash, unique per build)") << std::endl;
+
+    std::cout << std::endl;
+
+    // ==================================================================
+    // 8c. SIMPLIFIED CFG PROTECTION (CW_PROTECT)
+    // ==================================================================
+    std::cout << CW_STR("[8c] Simplified CFG Protection Demo (CW_PROTECT)") << std::endl;
+    std::cout << CW_STR("   same computations as 8b, but with one-line macros...") << std::endl;
+
+    // same conditional as demo 1 above - compare the code volume
+    int prot_result1 = CW_PROTECT(int, {
+        if (cfg_input > 20) return cfg_input * 3;
+        return cfg_input + 100;
+    });
+    std::cout << CW_STR("   conditional: if(15>20) 15*3 else 15+100 = ") << prot_result1
+              << CW_STR(" (expected: 115)") << std::endl;
+
+    // same loop as demo 2
+    int prot_result2 = CW_PROTECT(int, {
+        int x = cfg_input * 2;
+        int acc = 0;
+        while (x > 0) {
+            acc += x;
+            x -= 3;
+        }
+        return acc;
+    });
+    std::cout << CW_STR("   loop: sum(30,27,...,3) = ") << prot_result2
+              << CW_STR(" (expected: 165)") << std::endl;
+
+    // same void side-effect as demo 4
+    int prot_side = 0;
+    CW_PROTECT_VOID({
+        for (int i = 5; i > 0; i--)
+            prot_side += i;
+    });
+    std::cout << CW_STR("   void: sum(5..1) side_effect = ") << prot_side
+              << CW_STR(" (expected: 15)") << std::endl;
+
+    std::cout << CW_STR("   (same state machine output as CW_FLAT_*, zero manual decomposition)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 9. FUNCTION POINTER OBFUSCATION
     // ==================================================================
-    std::cout << "[9] Function Pointer Obfuscation Demo" << std::endl;
+    std::cout << CW_STR("[9] Function Pointer Obfuscation Demo") << std::endl;
 
     // obfuscate function pointer with anti-debug checks
     auto obfuscated_func = CW_CALL(simple_add);
     int func_result = obfuscated_func(15, 27);
-    std::cout << "   obfuscated function call result: " << func_result << std::endl;
-    std::cout << "   (function pointer is encrypted and includes anti-debug)" << std::endl;
+    std::cout << CW_STR("   obfuscated function call result: ") << func_result << std::endl;
+    std::cout << CW_STR("   (function pointer is encrypted and includes anti-debug)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 10. METAMORPHIC FUNCTION DEMO
     // ==================================================================
-    std::cout << "[10] Metamorphic Function Demo" << std::endl;
+    std::cout << CW_STR("[10] Metamorphic Function Demo") << std::endl;
 
     // create metamorphic function that switches between implementations
-    cloakwork::metamorphic::metamorphic_function<int(int, int)> meta_add({simple_add, simple_add_v2});
+    cloakwork::meta_func<int(int, int)> meta_add({simple_add, simple_add_v2});
 
-    std::cout << "   calling metamorphic function 5 times:" << std::endl;
+    std::cout << CW_STR("   calling metamorphic function 5 times:") << std::endl;
     for (int i = 0; i < 5; i++) {
         int result = meta_add(10, 20);
-        std::cout << "     call " << (i+1) << ": result = " << result << std::endl;
+        std::cout << CW_STR("     call ") << (i+1) << CW_STR(": result = ") << result << std::endl;
     }
-    std::cout << "   (implementation switches between calls, confuses analysis)" << std::endl;
+    std::cout << CW_STR("   (implementation switches between calls, confuses analysis)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 11. COMPREHENSIVE PROTECTION DEMO
     // ==================================================================
-    std::cout << "[11] Comprehensive Protection Demo" << std::endl;
-    std::cout << "    combining multiple protection layers..." << std::endl;
+    std::cout << CW_STR("[11] Comprehensive Protection Demo") << std::endl;
+    std::cout << CW_STR("    combining multiple protection layers...") << std::endl;
 
     // protected "secret" calculation with all layers
     auto secret_key_obf = CW_MBA(0x1337);  // MBA obfuscated value
@@ -298,34 +471,34 @@ int main() {
     // ==================================================================
     // 12. ADVANCED ANTI-DEBUG SHOWCASE
     // ==================================================================
-    std::cout << "[12] Advanced Anti-Debug Techniques" << std::endl;
-    std::cout << "    running comprehensive analysis detection..." << std::endl;
+    std::cout << CW_STR("[12] Advanced Anti-Debug Techniques") << std::endl;
+    std::cout << CW_STR("    running comprehensive analysis detection...") << std::endl;
 
     // check for advanced debugging techniques
-    if (cloakwork::anti_debug::advanced::kernel_debugger_present()) {
-        std::cout << "    ALERT: kernel debugger detected!" << std::endl;
+    if (CW_DETECT_KERNEL_DBG()) {
+        std::cout << CW_STR("    ALERT: kernel debugger detected!") << std::endl;
     } else {
-        std::cout << "    kernel debugger: not detected" << std::endl;
+        std::cout << CW_STR("    kernel debugger: not detected") << std::endl;
     }
 
     // timing check can have false positives, so it's disabled in comprehensive_check
-    if (cloakwork::anti_debug::advanced::advanced_timing_check()) {
-        std::cout << "    INFO: timing discrepancy detected (may be false positive)" << std::endl;
+    if (CW_TIMING_CHECK()) {
+        std::cout << CW_STR("    INFO: timing discrepancy detected (may be false positive)") << std::endl;
     } else {
-        std::cout << "    timing analysis: clean" << std::endl;
+        std::cout << CW_STR("    timing analysis: clean") << std::endl;
     }
 
-    if (cloakwork::anti_debug::advanced::detect_debugger_artifacts()) {
-        std::cout << "    INFO: debugger artifacts found in registry" << std::endl;
+    if (CW_DETECT_DBG_ARTIFACTS()) {
+        std::cout << CW_STR("    INFO: debugger artifacts found in registry") << std::endl;
     } else {
-        std::cout << "    registry artifacts: clean" << std::endl;
+        std::cout << CW_STR("    registry artifacts: clean") << std::endl;
     }
 
     // show comprehensive check result without crashing
-    if (cloakwork::anti_debug::comprehensive_check()) {
-        std::cout << "    COMPREHENSIVE: debugger detected (CW_ANTI_DEBUG would crash)" << std::endl;
+    if (CW_CHECK_DEBUG()) {
+        std::cout << CW_STR("    COMPREHENSIVE: debugger detected (CW_ANTI_DEBUG would crash)") << std::endl;
     } else {
-        std::cout << "    COMPREHENSIVE: all checks passed" << std::endl;
+        std::cout << CW_STR("    COMPREHENSIVE: all checks passed") << std::endl;
     }
 
     std::cout << std::endl;
@@ -333,7 +506,7 @@ int main() {
     // ==================================================================
     // 13. WIDE STRING ENCRYPTION
     // ==================================================================
-    std::cout << "[13] Wide String Encryption Demo" << std::endl;
+    std::cout << CW_STR("[13] Wide String Encryption Demo") << std::endl;
 
     const wchar_t* wide_msg = CW_WSTR(L"this is an encrypted wide string!");
     std::wcout << L"   encrypted wide string: " << wide_msg << std::endl;
@@ -343,94 +516,95 @@ int main() {
     // ==================================================================
     // 14. COMPILE-TIME STRING HASHING
     // ==================================================================
-    std::cout << "[14] Compile-Time String Hashing Demo" << std::endl;
+    std::cout << CW_STR("[14] Compile-Time String Hashing Demo") << std::endl;
 
     // compile-time hash - computed at build time
     constexpr uint32_t kernel32_hash = CW_HASH("kernel32.dll");
     constexpr uint32_t ntdll_hash = CW_HASH("ntdll.dll");
 
-    std::cout << "   hash of 'kernel32.dll': 0x" << std::hex << kernel32_hash << std::dec << std::endl;
-    std::cout << "   hash of 'ntdll.dll': 0x" << std::hex << ntdll_hash << std::dec << std::endl;
+    std::cout << CW_STR("   hash of 'kernel32.dll': 0x") << std::hex << kernel32_hash << std::dec << std::endl;
+    std::cout << CW_STR("   hash of 'ntdll.dll': 0x") << std::hex << ntdll_hash << std::dec << std::endl;
 
     // runtime hash comparison
-    const char* test_str = "kernel32.dll";
-    uint32_t runtime_hash = cloakwork::hash::fnv1a_runtime(test_str);
-    std::cout << "   runtime hash matches compile-time: " << (runtime_hash == kernel32_hash ? "yes" : "no") << std::endl;
+    auto test_str = CW_STR("kernel32.dll");
+    uint32_t runtime_hash = CW_HASH_RT(test_str);
+    std::cout << CW_STR("   runtime hash matches compile-time: ") << (runtime_hash == kernel32_hash ? CW_STR("yes") : CW_STR("no")) << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 15. IMPORT HIDING / DYNAMIC API RESOLUTION
     // ==================================================================
-    std::cout << "[15] Import Hiding Demo" << std::endl;
-    std::cout << "   resolving APIs without import table..." << std::endl;
+    std::cout << CW_STR("[15] Import Hiding Demo") << std::endl;
+    std::cout << CW_STR("   resolving APIs without import table...") << std::endl;
 
     // get ntdll base address by hash (use case-insensitive hash for module names)
-    void* ntdll_base = cloakwork::imports::getModuleBase(CW_HASH_CI("ntdll.dll"));
-    std::cout << "   ntdll.dll base: 0x" << std::hex << reinterpret_cast<uintptr_t>(ntdll_base) << std::dec << std::endl;
+    void* ntdll_base = CW_GET_MODULE("ntdll.dll");
+    std::cout << CW_STR("   ntdll.dll base: 0x") << std::hex << reinterpret_cast<uintptr_t>(ntdll_base) << std::dec << std::endl;
 
     // get kernel32 base
-    void* k32_base = cloakwork::imports::getModuleBase(CW_HASH_CI("kernel32.dll"));
-    std::cout << "   kernel32.dll base: 0x" << std::hex << reinterpret_cast<uintptr_t>(k32_base) << std::dec << std::endl;
+    void* k32_base = CW_GET_MODULE("kernel32.dll");
+    std::cout << CW_STR("   kernel32.dll base: 0x") << std::hex << reinterpret_cast<uintptr_t>(k32_base) << std::dec << std::endl;
 
     // resolve function by hash
     if (ntdll_base) {
-        void* nt_close = cloakwork::imports::getProcAddress(ntdll_base, CW_HASH("NtClose"));
-        std::cout << "   NtClose address: 0x" << std::hex << reinterpret_cast<uintptr_t>(nt_close) << std::dec << std::endl;
+        void* nt_close = CW_GET_PROC(ntdll_base, "NtClose");
+        std::cout << CW_STR("   NtClose address: 0x") << std::hex << reinterpret_cast<uintptr_t>(nt_close) << std::dec << std::endl;
     }
 
-    std::cout << "   (these functions are not in the import table!)" << std::endl;
+    std::cout << CW_STR("   (these functions are not in the import table!)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 16. DIRECT SYSCALL NUMBERS
     // ==================================================================
-    std::cout << "[16] Direct Syscall Demo" << std::endl;
+    std::cout << CW_STR("[16] Direct Syscall Demo") << std::endl;
 
     uint32_t syscall_NtClose = CW_SYSCALL_NUMBER(NtClose);
     uint32_t syscall_NtQueryInformationProcess = CW_SYSCALL_NUMBER(NtQueryInformationProcess);
 
-    std::cout << "   NtClose syscall number: 0x" << std::hex << syscall_NtClose << std::dec << std::endl;
-    std::cout << "   NtQueryInformationProcess syscall number: 0x" << std::hex << syscall_NtQueryInformationProcess << std::dec << std::endl;
-    std::cout << "   (syscall numbers are OS version dependent)" << std::endl;
+    std::cout << CW_STR("   NtClose syscall number: 0x") << std::hex << syscall_NtClose << std::dec << std::endl;
+    std::cout << CW_STR("   NtQueryInformationProcess syscall number: 0x") << std::hex << syscall_NtQueryInformationProcess << std::dec << std::endl;
+    std::cout << CW_STR("   SYSCALL_ERROR sentinel: 0x") << std::hex << cloakwork::syscall::SYSCALL_ERROR << std::dec << std::endl;
+    std::cout << CW_STR("   (syscall numbers are OS version dependent, SYSCALL_ERROR = UINT32_MAX on failure)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 17. ANTI-VM/SANDBOX DETECTION
     // ==================================================================
-    std::cout << "[17] Anti-VM/Sandbox Detection Demo" << std::endl;
-    std::cout << "   running VM/sandbox detection checks..." << std::endl;
+    std::cout << CW_STR("[17] Anti-VM/Sandbox Detection Demo") << std::endl;
+    std::cout << CW_STR("   running VM/sandbox detection checks...") << std::endl;
 
-    if (cloakwork::anti_debug::anti_vm::is_hypervisor_present()) {
-        std::cout << "   INFO: hypervisor detected" << std::endl;
+    if (CW_DETECT_HYPERVISOR()) {
+        std::cout << CW_STR("   INFO: hypervisor detected") << std::endl;
     } else {
-        std::cout << "   hypervisor check: clean" << std::endl;
+        std::cout << CW_STR("   hypervisor check: clean") << std::endl;
     }
 
-    if (cloakwork::anti_debug::anti_vm::detect_vm_vendor()) {
-        std::cout << "   INFO: VM vendor signature detected" << std::endl;
+    if (CW_DETECT_VM_VENDOR()) {
+        std::cout << CW_STR("   INFO: VM vendor signature detected") << std::endl;
     } else {
-        std::cout << "   VM vendor check: clean" << std::endl;
+        std::cout << CW_STR("   VM vendor check: clean") << std::endl;
     }
 
-    if (cloakwork::anti_debug::anti_vm::detect_low_resources()) {
-        std::cout << "   INFO: low resources detected (possible sandbox)" << std::endl;
+    if (CW_DETECT_LOW_RESOURCES()) {
+        std::cout << CW_STR("   INFO: low resources detected (possible sandbox)") << std::endl;
     } else {
-        std::cout << "   resource check: clean" << std::endl;
+        std::cout << CW_STR("   resource check: clean") << std::endl;
     }
 
-    if (cloakwork::anti_debug::anti_vm::detect_sandbox_dlls()) {
-        std::cout << "   INFO: sandbox DLLs detected" << std::endl;
+    if (CW_DETECT_SANDBOX_DLLS()) {
+        std::cout << CW_STR("   INFO: sandbox DLLs detected") << std::endl;
     } else {
-        std::cout << "   sandbox DLL check: clean" << std::endl;
+        std::cout << CW_STR("   sandbox DLL check: clean") << std::endl;
     }
 
     if (CW_CHECK_VM()) {
-        std::cout << "   COMPREHENSIVE: VM/sandbox detected (CW_ANTI_VM would crash)" << std::endl;
+        std::cout << CW_STR("   COMPREHENSIVE: VM/sandbox detected (CW_ANTI_VM would crash)") << std::endl;
     } else {
-        std::cout << "   COMPREHENSIVE: all VM/sandbox checks passed" << std::endl;
+        std::cout << CW_STR("   COMPREHENSIVE: all VM/sandbox checks passed") << std::endl;
     }
 
     std::cout << std::endl;
@@ -438,93 +612,148 @@ int main() {
     // ==================================================================
     // 18. OBFUSCATED COMPARISONS
     // ==================================================================
-    std::cout << "[18] Obfuscated Comparisons Demo" << std::endl;
+    std::cout << CW_STR("[18] Obfuscated Comparisons Demo") << std::endl;
 
     int cmp_a = 42;
     int cmp_b = 42;
     int cmp_c = 100;
 
-    std::cout << "   CW_EQ(42, 42) = " << (CW_EQ(cmp_a, cmp_b) ? "true" : "false") << " (expected: true)" << std::endl;
-    std::cout << "   CW_NE(42, 100) = " << (CW_NE(cmp_a, cmp_c) ? "true" : "false") << " (expected: true)" << std::endl;
-    std::cout << "   CW_LT(42, 100) = " << (CW_LT(cmp_a, cmp_c) ? "true" : "false") << " (expected: true)" << std::endl;
-    std::cout << "   CW_GT(100, 42) = " << (CW_GT(cmp_c, cmp_a) ? "true" : "false") << " (expected: true)" << std::endl;
-    std::cout << "   CW_LE(42, 42) = " << (CW_LE(cmp_a, cmp_b) ? "true" : "false") << " (expected: true)" << std::endl;
-    std::cout << "   CW_GE(100, 42) = " << (CW_GE(cmp_c, cmp_a) ? "true" : "false") << " (expected: true)" << std::endl;
-    std::cout << "   (comparisons use MBA and XOR to hide the actual operation)" << std::endl;
+    std::cout << CW_STR("   CW_EQ(42, 42) = ") << (CW_EQ(cmp_a, cmp_b) ? "true" : "false") << CW_STR(" (expected: true)") << std::endl;
+    std::cout << CW_STR("   CW_NE(42, 100) = ") << (CW_NE(cmp_a, cmp_c) ? "true" : "false") << CW_STR(" (expected: true)") << std::endl;
+    std::cout << CW_STR("   CW_LT(42, 100) = ") << (CW_LT(cmp_a, cmp_c) ? "true" : "false") << CW_STR(" (expected: true)") << std::endl;
+    std::cout << CW_STR("   CW_GT(100, 42) = ") << (CW_GT(cmp_c, cmp_a) ? "true" : "false") << CW_STR(" (expected: true)") << std::endl;
+    std::cout << CW_STR("   CW_LE(42, 42) = ") << (CW_LE(cmp_a, cmp_b) ? "true" : "false") << CW_STR(" (expected: true)") << std::endl;
+    std::cout << CW_STR("   CW_GE(100, 42) = ") << (CW_GE(cmp_c, cmp_a) ? "true" : "false") << CW_STR(" (expected: true)") << std::endl;
+    std::cout << CW_STR("   (comparisons use MBA and XOR to hide the actual operation)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 19. ENCRYPTED CONSTANTS
     // ==================================================================
-    std::cout << "[19] Encrypted Constants Demo" << std::endl;
+    std::cout << CW_STR("[19] Encrypted Constants Demo") << std::endl;
 
     // compile-time encrypted constant
     int encrypted_magic = CW_CONST(0xDEADBEEF);
-    std::cout << "   CW_CONST(0xDEADBEEF) = 0x" << std::hex << encrypted_magic << std::dec << std::endl;
+    std::cout << CW_STR("   CW_CONST(0xDEADBEEF) = 0x") << std::hex << encrypted_magic << std::dec << std::endl;
 
     int encrypted_value = CW_CONST(12345);
-    std::cout << "   CW_CONST(12345) = " << encrypted_value << std::endl;
+    std::cout << CW_STR("   CW_CONST(12345) = ") << encrypted_value << std::endl;
 
     // runtime constant (different key each execution)
-    cloakwork::constants::runtime_constant<int> rt_const(9999);
-    std::cout << "   runtime_constant(9999) = " << rt_const.get() << std::endl;
-    std::cout << "   (constants are XOR-encrypted and decrypted at runtime)" << std::endl;
+    cloakwork::rt_const<int> rt_val(9999);
+    std::cout << CW_STR("   runtime_constant(9999) = ") << rt_val.get() << std::endl;
+    std::cout << CW_STR("   (constants are XOR-encrypted and decrypted at runtime)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 20. JUNK CODE INSERTION
     // ==================================================================
-    std::cout << "[20] Junk Code Insertion Demo" << std::endl;
+    std::cout << CW_STR("[20] Junk Code Insertion Demo") << std::endl;
 
-    std::cout << "   inserting junk computation..." << std::endl;
+    std::cout << CW_STR("   inserting junk computation...") << std::endl;
     CW_JUNK();
-    std::cout << "   junk computation complete" << std::endl;
+    std::cout << CW_STR("   junk computation complete") << std::endl;
 
-    std::cout << "   inserting junk control flow..." << std::endl;
+    std::cout << CW_STR("   inserting junk control flow...") << std::endl;
     CW_JUNK_FLOW();
-    std::cout << "   junk control flow complete" << std::endl;
+    std::cout << CW_STR("   junk control flow complete") << std::endl;
 
-    std::cout << "   (junk code confuses decompilers and increases entropy)" << std::endl;
+    std::cout << CW_STR("   (junk code confuses decompilers and increases entropy)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 21. RETURN ADDRESS SPOOFING
     // ==================================================================
-    std::cout << "[21] Return Address Spoofing Demo" << std::endl;
+    std::cout << CW_STR("[21] Return Address Spoofing Demo") << std::endl;
 
-    void* ret_gadget = cloakwork::spoof::getRetGadget();
-    std::cout << "   found ret gadget at: 0x" << std::hex << reinterpret_cast<uintptr_t>(ret_gadget) << std::dec << std::endl;
-    std::cout << "   (can be used to spoof return addresses in call stacks)" << std::endl;
+    void* ret_gadget = CW_RET_GADGET();
+    std::cout << CW_STR("   found ret gadget at: 0x") << std::hex << reinterpret_cast<uintptr_t>(ret_gadget) << std::dec << std::endl;
+    std::cout << CW_STR("   (can be used to spoof return addresses in call stacks)") << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
     // 22. INTEGRITY VERIFICATION
     // ==================================================================
-    std::cout << "[22] Integrity Verification Demo" << std::endl;
+    std::cout << CW_STR("[22] Integrity Verification Demo") << std::endl;
 
     // check if our own functions are hooked
     bool simple_add_hooked = CW_DETECT_HOOK(simple_add);
-    std::cout << "   simple_add hook check: " << (simple_add_hooked ? "HOOKED!" : "clean") << std::endl;
+    std::cout << CW_STR("   simple_add hook check: ") << (simple_add_hooked ? CW_STR("HOOKED!") : "clean") << std::endl;
 
     // compute hash of function
-    uint32_t func_hash = cloakwork::integrity::computeHash(
+    uint32_t func_hash = CW_COMPUTE_HASH(
         reinterpret_cast<const void*>(&simple_add), 32);
-    std::cout << "   simple_add code hash: 0x" << std::hex << func_hash << std::dec << std::endl;
+    std::cout << CW_STR("   simple_add code hash: 0x") << std::hex << func_hash << std::dec << std::endl;
 
     // verify multiple functions at once
-    bool all_clean = cloakwork::integrity::verifyFunctions(&simple_add, &simple_add_v2);
-    std::cout << "   all functions clean: " << (all_clean ? "yes" : "NO - hooks detected!") << std::endl;
+    bool all_clean = CW_VERIFY_FUNCS(&simple_add, &simple_add_v2);
+    std::cout << CW_STR("   all functions clean: ") << (all_clean ? "yes" : CW_STR("NO - hooks detected!")) << std::endl;
 
     std::cout << std::endl;
 
     // ==================================================================
-    // 23. ENCRYPTED MESSAGE OUTPUT
+    // 23. STACK STRING BUILDER
     // ==================================================================
-    std::cout << "[23] Final Encrypted Output" << std::endl;
+    std::cout << CW_STR("[23] Stack String Builder Demo") << std::endl;
+
+    // build a string char-by-char on the stack - never appears as a literal in the binary
+    CW_STACK_STR(stack_hello, 'h','e','l','l','o',' ','f','r','o','m',' ','s','t','a','c','k','\0');
+    std::cout << CW_STR("   stack-built string: ") << stack_hello << std::endl;
+    std::cout << CW_STR("   (string never exists as a contiguous literal in the binary)") << std::endl;
+    std::cout << CW_STR("   (each char is placed individually and XOR-scrambled on the stack)") << std::endl;
+
+    std::cout << std::endl;
+
+    // ==================================================================
+    // 24. PE HEADER ERASURE
+    // ==================================================================
+    std::cout << CW_STR("[24] PE Header Erasure Demo") << std::endl;
+
+    std::cout << CW_STR("   CW_ERASE_PE_HEADER() is available") << std::endl;
+    std::cout << CW_STR("   (zeros DOS header, NT headers, and section table to prevent dumping)") << std::endl;
+    std::cout << CW_STR("   NOTE: not called here - would break the running demo executable") << std::endl;
+
+    std::cout << std::endl;
+
+    // ==================================================================
+    // 25. ENHANCED ANTI-DEBUG (NtQueryInformationProcess)
+    // ==================================================================
+    std::cout << CW_STR("[25] Enhanced Anti-Debug Demo") << std::endl;
+
+    // debug port check via NtQueryInformationProcess
+    bool debug_port = CW_CHECK_DEBUG_PORT();
+    std::cout << CW_STR("   CW_CHECK_DEBUG_PORT(): ") << (debug_port ? CW_STR("DEBUGGER DETECTED") : "clean") << std::endl;
+    std::cout << CW_STR("   (queries ProcessDebugPort + ProcessDebugObjectHandle via NtQueryInformationProcess)") << std::endl;
+
+    // hide thread from debugger - available but not called to keep demo debuggable
+    std::cout << CW_STR("   CW_HIDE_THREAD() is available") << std::endl;
+    std::cout << CW_STR("   (uses NtSetInformationThread with ThreadHideFromDebugger)") << std::endl;
+    std::cout << CW_STR("   NOTE: not called here - would hide this thread from attached debuggers") << std::endl;
+
+    std::cout << std::endl;
+
+    // ==================================================================
+    // 26. INDIRECT SYSCALLS
+    // ==================================================================
+    std::cout << CW_STR("[26] Indirect Syscall Demo") << std::endl;
+
+    // invoke NtClose via indirect syscall with an invalid handle to demonstrate the mechanism
+    // NtClose(INVALID_HANDLE_VALUE) returns STATUS_INVALID_HANDLE (0xC0000008) which is expected
+    NTSTATUS nt_result = CW_SYSCALL(NtClose, INVALID_HANDLE_VALUE);
+    std::cout << CW_STR("   CW_SYSCALL(NtClose, INVALID_HANDLE_VALUE) = 0x") << std::hex << static_cast<uint32_t>(nt_result) << std::dec << std::endl;
+    std::cout << CW_STR("   (expected: STATUS_INVALID_HANDLE 0xC0000008 or similar)") << std::endl;
+    std::cout << CW_STR("   (syscall executed through ntdll gadget - return address points to ntdll)") << std::endl;
+
+    std::cout << std::endl;
+
+    // ==================================================================
+    // 27. ENCRYPTED MESSAGE OUTPUT
+    // ==================================================================
+    std::cout << CW_STR("[27] Final Encrypted Output") << std::endl;
 
     // all these strings are encrypted and have unique runtime keys
     std::cout << "    " << CW_STR("this demo showcases:") << std::endl;
@@ -536,6 +765,7 @@ int main() {
     std::cout << "    - " << CW_STR("obfuscated comparison operators") << std::endl;
     std::cout << "    - " << CW_STR("encrypted compile-time constants") << std::endl;
     std::cout << "    - " << CW_STR("control flow obfuscation and flattening") << std::endl;
+    std::cout << "    - " << CW_STR("CFG flattening (block-level encrypted state machine)") << std::endl;
     std::cout << "    - " << CW_STR("junk code insertion") << std::endl;
     std::cout << "    - " << CW_STR("function pointer encryption") << std::endl;
     std::cout << "    - " << CW_STR("metamorphic function implementations") << std::endl;
@@ -546,10 +776,15 @@ int main() {
     std::cout << "    - " << CW_STR("anti-VM/sandbox detection") << std::endl;
     std::cout << "    - " << CW_STR("code integrity verification / hook detection") << std::endl;
 
+    std::cout << "    - " << CW_STR("XTEA-based string encryption (replaces XOR)") << std::endl;
+    std::cout << "    - " << CW_STR("indirect syscall invocation") << std::endl;
+    std::cout << "    - " << CW_STR("PE header erasure") << std::endl;
+    std::cout << "    - " << CW_STR("stack string builder") << std::endl;
+    std::cout << "    - " << CW_STR("enhanced anti-debug (NtQueryInformationProcess)") << std::endl;
     std::cout << "    - " << CW_STR("kernel mode driver support (WDM/KMDF)") << std::endl;
 
     std::cout << std::endl;
-    std::cout << "=== DEMO COMPLETE ===" << std::endl;
+    std::cout << CW_STR("=== DEMO COMPLETE ===") << std::endl;
     std::cout << std::endl;
 
     // ==================================================================
