@@ -3276,7 +3276,7 @@ namespace cloakwork {
             // predicate 0: hash stack pointer through non-trivial computation
             // the compiler cannot determine the stack address at compile time,
             // and the multiply-xor-shift chain is non-invertible for static analysis
-            CW_NOINLINE bool stack_hash_true(int seed) {
+            static CW_NOINLINE bool stack_hash_true(int seed) {
                 volatile int anchor = seed;
                 uintptr_t sp = reinterpret_cast<uintptr_t>(&anchor);
                 CW_COMPILER_BARRIER();
@@ -3298,7 +3298,7 @@ namespace cloakwork {
             // predicate 1: rdtsc XOR with stack address
             // both values are runtime-only; the XOR and modular arithmetic
             // produce a result the optimizer cannot statically resolve
-            CW_NOINLINE bool tsc_stack_true() {
+            static CW_NOINLINE bool tsc_stack_true() {
 #if defined(_WIN32)
                 volatile int anchor = 0;
                 uintptr_t sp = reinterpret_cast<uintptr_t>(&anchor);
@@ -3326,7 +3326,7 @@ namespace cloakwork {
             // predicate 2: thread ID through non-invertible transform
             // GetCurrentThreadId is a runtime call, and the transform chain
             // ensures the optimizer cannot prove the final comparison
-            CW_NOINLINE bool tid_transform_true() {
+            static CW_NOINLINE bool tid_transform_true() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 uint32_t tid = GetCurrentThreadId();
                 CW_COMPILER_BARRIER();
@@ -3360,7 +3360,7 @@ namespace cloakwork {
             // predicate 3: multiply-accumulate with runtime stack entropy
             // uses the address of a local as entropy, runs it through a
             // sequence of operations that always produces a known bit pattern
-            CW_NOINLINE bool mac_entropy_true(int seed) {
+            static CW_NOINLINE bool mac_entropy_true(int seed) {
                 volatile int anchor = seed;
                 uint32_t addr_bits = static_cast<uint32_t>(
                     reinterpret_cast<uintptr_t>(&anchor));
@@ -3381,7 +3381,7 @@ namespace cloakwork {
             // predicate 4: compare two independently computed representations of
             // the same runtime value; compiler cannot prove equality across
             // volatile stores and reloads with arithmetic in between
-            CW_NOINLINE bool dual_path_true() {
+            static CW_NOINLINE bool dual_path_true() {
                 volatile int anchor = 42;
                 uintptr_t base = reinterpret_cast<uintptr_t>(&anchor);
                 CW_COMPILER_BARRIER();
@@ -3404,7 +3404,7 @@ namespace cloakwork {
 
             // predicate 5: use ReturnAddress as entropy source;
             // the return address is purely runtime and varies per call site
-            CW_NOINLINE bool retaddr_true() {
+            static CW_NOINLINE bool retaddr_true() {
 #if defined(_MSC_VER)
                 uintptr_t ra = reinterpret_cast<uintptr_t>(_ReturnAddress());
 #elif defined(__GNUC__)
@@ -3422,7 +3422,7 @@ namespace cloakwork {
             }
 
             // predicate 6: process/module base address through hash
-            CW_NOINLINE bool module_hash_true() {
+            static CW_NOINLINE bool module_hash_true() {
 #if defined(_WIN32) && !CW_KERNEL_MODE
                 uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
                 CW_COMPILER_BARRIER();
@@ -3453,7 +3453,7 @@ namespace cloakwork {
             // predicate 7: rdtsc difference is always non-negative
             // two consecutive rdtsc calls always produce t2 >= t1 on the same core,
             // and the subtraction through volatile prevents constant folding
-            CW_NOINLINE bool tsc_delta_true() {
+            static CW_NOINLINE bool tsc_delta_true() {
 #if defined(_WIN32)
                 uint64_t t1 = __rdtsc();
                 CW_COMPILER_BARRIER();
